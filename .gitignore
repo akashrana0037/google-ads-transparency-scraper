@@ -1,0 +1,60 @@
+# --- Mission Control Junk ---
+__pycache__/
+google_session/
+*.docx
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Node.js (Frontend) ---
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Scraper Output & Checkpoints ---
+# Completely block raw output data
+output/*
+!output/.gitkeep
+*.csv
+*.json
+*.html
+
+# --- Editors & OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# --- Assistant & Automation ---
+.agent/
+scripts/ralph/

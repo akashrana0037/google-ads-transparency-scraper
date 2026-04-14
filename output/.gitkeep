@@ -1,0 +1,2 @@
+# Keep this directory in Git even if it's empty.
+# Real scraped results will be ignored by .gitignore rules.
