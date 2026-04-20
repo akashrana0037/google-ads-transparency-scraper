@@ -45,6 +45,9 @@ output/*
 !output/.gitkeep
 *.csv
 *.json
+mission_state.json
+test_*/
+debug_*/
 *.html
 
 # --- Editors & OS ---
