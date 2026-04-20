@@ -1,88 +1,78 @@
-# 🏹 Vyom: Vector-Eye Scraper Elite 🚀
+# 🛰️ Vyom (Vector-Eye) v2.0
+### Autonomous Google Ads Sector Intelligence & Competitor Engine
 
-**An autonomous, high-stealth competitor analysis and lead generation engine.**
-
-Vyom (Vector-Eye) is a high-performance scraping system that captures Google Ads, Local, and Organic results, then crawls competitor websites for "contact intelligence" (emails, phones, social links). It now features a professional Web UI and a robust FastAPI backend.
-
----
-
-## 🏗️ System Architecture
-
-- **Frontend**: React + Vite + Tailwind CSS (Cyberpunk/Dark aesthetic)
-- **Backend**: FastAPI (Python) with AsyncIO task orchestration
-- **Engine**: Playwright (Stealth) + BeautifulSoup4
-- **Reporting**: Automated CSV generation and atomic JSON checkpointing
+Vyom (Vector-Eye) is a precision-engineered intelligence tool designed to map out entire commercial sectors by identifying active advertisers and harvesting their high-value metadata. Unlike generic scrapers, Vyom operates on **Sectors**, not just keywords, and strictly filters for **active ad-spend targets**.
 
 ---
 
-## 🚀 Getting Started
+## ⚡ Elite Performance Features
 
-### 1. Backend Setup (API & Scraper)
+### 1. 🧠 Alphabet Soup Sector Discovery
+Provide a single high-level sector (e.g., *"Luxury Real Estate"*), and the engine autonomously discovers the **Top 20 high-intent transactional keywords** using:
+*   **Alphabet Expansion**: Iterating through `Sector + [a-z]` suggestions.
+*   **Transactional Scoring**: Algorithms that prioritize keywords with "buying signals" (*Price, Best, Agency, Quote*).
+*   **PAA mining**: Extracting "People Also Ask" questions and converting them into keyword targets.
+
+### 2. 🛡️ Absolute Advertiser Filtering
+Maximize your ROI by focusing only on competitors spending money.
+*   **Verified Ads Only**: The system filters out organic noise.
+*   **Multi-Source Validation**: Domains are cross-referenced with the **Google Ads Transparency Center (ATC)** to confirm active advertiser status and Ad IDs.
+
+### 3. 🕴️ Stealth-First Architecture
+Bypass Google's modern anti-bot measures:
+*   **Human Simulation**: Mimics human typing and navigation behavior.
+*   **Identity Shifting**: Rotates User-Agents, Viewports, and Hardware signatures.
+*   **Persistent Trust**: Support for persistent Google login sessions to establish "Trusted Session" status.
+
+### 4. 💎 Sky-Blue Command Center
+A premium React Dashboard featuring:
+*   **Intelligence Grid**: Real-time streaming lead data.
+*   **Ghost Feed**: Live telemetry logs from the scraping engine.
+*   **One-Click Export**: 120-minute atomic CSV reports with enriched advertiser metadata.
+
+---
+
+## 🛠️ Quick Installation
+
+### 1. Requirements
+*   Python 3.10+
+*   Node.js & npm (for Frontend)
+*   Playwright Browsers
+
+### 2. Setup
 ```bash
-# Navigate to the scrapper directory
-cd scrapper
-
-# Install dependencies
+# Install Python Dependencies
 pip install -r requirements.txt
-# (Ensure playwright chromium is installed)
 playwright install chromium
 
-# Launch the API server
+# Install Frontend Dependencies
+cd frontend
+npm install
+```
+
+### 3. Execution
+**Start the Backend Engine:**
+```bash
 python main_api.py
 ```
-*The API will be available at `http://localhost:8000`.*
 
-### 2. Frontend Setup (Web UI)
+**Start the Dashboard:**
 ```bash
-# Navigate to the frontend directory
-cd scrapper/frontend
-
-# Install dependencies
-npm install
-
-# Launch the development server
+cd frontend
 npm run dev
 ```
-*The UI will be available at `http://localhost:5173` (default Vite port).*
+
+Visit `http://localhost:3000` to launch your first mission.
 
 ---
 
-## 💻 CLI Mode (Standalone)
-
-You can still run the scraper directly via command line for quick audits:
-
-```bash
-# Example: Scrape 4 pages for a keyword with 5 concurrent site visits
-python scraper.py --keywords "best solar panels" --pages 4 --concurrency 5
-```
-
-### Advanced CLI Options:
-- `--proxy-list "proxies.txt"`: Enable autonomous proxy rotation.
-- `--resume "path/to/checkpoint.json"`: Resume an interrupted mission.
-- `--headless False`: Watch the "Silent Hunter" in action (non-headless mode).
+## 📂 Architecture
+*   `scraper.py`: The core autonomous intelligence engine.
+*   `main_api.py`: FastAPI backend orchestrator & task manager.
+*   `frontend/`: The high-fidelity React dashboard.
+*   `output/`: Automated CSV and debug captures.
 
 ---
 
-## 🛡️ Stealth & Resilience
-
-- **JS Fingerprint Masking**: Removes `navigator.webdriver` flags and mocks hardware signatures.
-- **Human Behavior Simulation**: Randomized mouse movements and non-linear scrolling.
-- **Self-Healing Loop**: Automatically destroys and recreates browser contexts on CAPTCHA detection.
-- **Atomic Checkpointing**: Zero data loss; flushes to disk after every page load.
-
----
-
-## 📊 Output Specification
-
-Results are saved to the `output/` directory in two formats:
-1. **CSV Reports**: Professional spreadsheets for CRM import.
-2. **JSON Checkpoints**: Full session state for resumption and API serving.
-
-**Data captured includes**:
-- Result Type (Ad/Local/Organic)
-- Contact Info (Emails, Phones, Addresses)
-- Social Metadata (LinkedIn, FB, Twitter/X, etc.)
-- Scrape Status & Latency
-
----
-*Built for elite intelligence gathering by Vyom Agents.*
+## ⚖️ License & Ethics
+This tool is for competitive intelligence and research purposes. Users are responsible for adhering to Google's Terms of Service and local privacy regulations.

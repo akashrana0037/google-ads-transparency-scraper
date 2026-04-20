@@ -30,11 +30,19 @@ CONFIG = {
         # Google rotates class names; we use multiple fallbacks.
         "ad_block_css": [
             "[data-text-ad]",           # Most stable data attribute
-            ".uEierd",                   # Top ad container (2024)
+            ".uEierd",                   # Top ad container
             ".vdQmEd",                   # Alternative top ad
             ".v5yQqb",                   # Bottom ad block
             "[aria-label='Ads']",        # Accessible label fallback
+            "div:has([aria-label='Ad'])",
+            "div:has([aria-label='Ads'])",
+            "div:has([aria-label='Sponsored'])",
+            ".commercial-unit-desktop-top",
+            "#tads .commercial-unit",
+            ".K6of9c",                   # 2025 variant
+            ".a8Gq9e",                   # 2025 variant
         ],
+
         # Playwright locator for live DOM ad detection (JS-rendered)
         "ad_sponsored_label": "[aria-label='Sponsored'], [aria-label='Ad'], .x54gtf, .CbQPAb",
         # Organic results
@@ -123,6 +131,10 @@ def get_initial_state():
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Global state for signal handling (CLI only)
+CHECKPOINT_STATE = get_initial_state()
+CHECKPOINT_FILE = None
+
 # ============================================================================
 # 2. CHECKPOINT & STATE MANAGEMENT
 # ============================================================================
@@ -150,7 +162,8 @@ def handle_interrupt(sig, frame):
     run_meta = CHECKPOINT_STATE.get("run_meta", {})
     run_meta["status"] = "interrupted"
     CHECKPOINT_STATE["run_meta"] = run_meta
-    flush_checkpoint()
+    flush_checkpoint(CHECKPOINT_STATE, CHECKPOINT_FILE)
+
     
     # Attempt to write partial CSV only if we have an output directory
     output_dir = run_meta.get("output_dir")
@@ -209,17 +222,25 @@ def generate_keyword_variants(seed: str) -> List[str]:
 
 async def _fetch_google_autocomplete(sector: str, location: str) -> set:
     """
-    Hits Google's Suggest API — zero browser, zero bot detection.
+    Hits Google's Suggest API with Alphabet Soup expansion.
     Returns a set of raw suggestion strings.
     """
     import urllib.request
     suggestions = set()
+    
+    # ── Phase A: Standard Queries ──
     queries = [
         f"{sector} {location}",
         f"best {sector} {location}",
         f"top {sector} {location}",
         f"{sector} services {location}",
     ]
+    
+    # ── Phase B: Alphabet Soup (A-M for speed/coverage balance) ──
+    # We use a subset of letters to keep it fast while still being "elite"
+    for char in "abcde": 
+        queries.append(f"{sector} {char}")
+
     for q in queries:
         try:
             url = f"https://suggestqueries.google.com/complete/search?client=firefox&q={quote(q)}&hl=en&gl=in"
@@ -333,36 +354,48 @@ async def discover_elite_keywords(page: Page, sector: str, location: str, task_r
     except Exception as e:
         logging.warning(f" [!] SERP discovery hurdle (non-fatal, fallback active): {e}")
 
-    # ── FINAL PROCESSING: location-qualify, deduplicate, score, cap ──────────
+    # ── FINAL PROCESSING: Transactional Intent Scoring ──
+    # Goal: Pick the top 20 "Perfect" transactional keywords
+    scored_pool = []
+    modifiers = ["buy", "best", "price", "cost", "professional", "services", "agency", "quote", "near me", "rating"]
     loc_low = location.lower()
-    final_set = set()
-
+    
     for kw in discovered:
-        kw = kw.strip()
-        if not kw or len(kw) < 4:
-            continue
-        # Skip pure question strings
-        if kw.endswith("?"):
-            continue
-        # Filter out irrelevant noise (Google UI text, etc.)
-        noise_patterns = ["google", "search", "results", "images", "maps", "news", "shopping"]
-        if any(p in kw.lower() for p in noise_patterns):
-            continue
-        # Ensure location is present
-        kw_lower = kw.lower()
-        if loc_low not in kw_lower:
-            kw = f"{kw} {location}"
-        final_set.add(kw.strip())
+        kw = kw.strip().lower()
+        if not kw or len(kw) < 4: continue
+        
+        score = 0
+        # Rule 1: Location relevance (High Priority)
+        if loc_low in kw: score += 15
+        
+        # Rule 2: Transactional Intent Modifiers
+        for mod in modifiers:
+            if mod in kw: score += 10
+            
+        # Rule 3: Naturalness (exclude overly short/long strings)
+        words = kw.split()
+        if 2 <= len(words) <= 6: score += 5
+        
+        # Rule 4: Prefer the original sector name being present
+        if sector.lower() in kw: score += 8
+        
+        scored_pool.append((score, kw))
 
-    # Sort: prioritize shorter, more focused commercial keywords
-    sorted_results = sorted(final_set, key=lambda k: (len(k), k))
+    # Sort by score descending
+    scored_pool.sort(key=lambda x: x[0], reverse=True)
+    
+    # Take top 20
+    results = [item[1] for item in scored_pool[:20]]
+    
+    # Ensure raw seed is always included at the top if not present
+    seed_kw = f"{sector} {location}".lower()
+    if seed_kw not in results:
+        results = [seed_kw] + results[:-1]
 
-    # Cap to 20 — enough variety without overwhelming the user
-    results = sorted_results[:20]
-
-    if task_ref: task_ref.log(f"[✓] Discovery Complete. Surfaced {len(results)} high-intent keyword targets.")
-    logging.info(f" [Intel] Final keyword list ({len(results)}): {results}")
+    if task_ref: task_ref.log(f" [✓] Final Intelligence Pool: 20 Elite High-Intent Keywords.")
+    logging.info(f" [Intel] Selected top 20 transactional keywords: {results}")
     return results
+
 
 # ============================================================================
 # 4. EXTRACTION UTILITIES
@@ -555,21 +588,9 @@ async def _extract_ads_from_live_dom(page: Page, variant: str, domain_map: dict,
     """
     ads_found = 0
 
-    # Strategy A: Find elements with data-text-ad attribute (most reliable)
-    strategy_selectors = [
-        "[data-text-ad]",
-        ".uEierd",
-        ".vdQmEd", 
-        ".v5yQqb",
-        # 2025/2026: ads often sit inside a div that has a child with aria-label='Ad' or 'Ads'
-        "div:has([aria-label='Ad'])",
-        "div:has([aria-label='Ads'])",
-        "div:has([aria-label='Sponsored'])",
-        ".commercial-unit-desktop-top",
-        "#tads .commercial-unit",
-        "#tads",  # Top ads container
-        "#bottomads",  # Bottom ads container
-    ]
+    # Strategy: Use multiple selector strategies from CONFIG
+    strategy_selectors = CONFIG['selectors']['ad_block_css']
+
 
     seen_in_this_call = set()
 
@@ -611,9 +632,21 @@ async def _extract_ads_from_live_dom(page: Page, variant: str, domain_map: dict,
                     seen_in_this_call.add(domain)
 
                     if domain in domain_map:
-                        if variant not in domain_map[domain].get('matched_keywords', []):
-                            domain_map[domain].setdefault('matched_keywords', []).append(variant)
+                        # Upgrade Organic/Local to Ad if encountered in an ad slot
+                        existing = domain_map[domain]
+                        if existing.get("result_type") != "Ad":
+                            logging.info(f"   [Ad Upgrade] {domain} from {existing.get('result_type')} -> Ad")
+                            existing["result_type"] = "Ad"
+                            # Add missing ad details
+                            existing["ad_headline"] = existing.get("ad_headline") or headline
+                            existing["ad_description"] = existing.get("ad_description") or description
+                            existing["displayed_link"] = existing.get("displayed_link") or displayed_link
+                            existing["landing_page_url"] = landing_url or existing.get("landing_page_url")
+                        
+                        if variant not in existing.get('matched_keywords', []):
+                            existing.setdefault('matched_keywords', []).append(variant)
                         continue
+
 
                     # Extract headline
                     headline = ""
@@ -1165,6 +1198,19 @@ def export_csv(state: dict, output_dir: str, partial: bool = False):
         
         for c in comps:
             domain = c["domain"]
+            atc = state["atc_data"].get(domain, {
+                "verified_name": "N/A", "advertiser_id": "N/A", "active_ads": "0"
+            })
+            
+            # FILTER: Only export companies identified as active advertisers
+            # (Either caught in SERP as an Ad OR verified via ATC as having >0 ads)
+            is_serp_ad = c.get("result_type") == "Ad"
+            is_atc_advertiser = atc.get("active_ads") not in ["0", "N/A", "Not Found", ""]
+            
+            if not (is_serp_ad or is_atc_advertiser):
+                continue
+
+
             harvest = contacts.get(domain, {
                  "emails": [], "phones": [], "address": "",
                  "social": {'facebook': '', 'instagram': '', 'linkedin': '', 'twitter': '', 'youtube': ''},
@@ -1358,7 +1404,18 @@ async def run_autonomous_scrape(keywords: str, location: str, pages: int, checkp
             export_csv(state, output_dir, partial=False)
             
             filename = "results_" + state["run_meta"]["started_at"].replace(":", "").replace("-", "").replace("T", "_")[:15] + ".csv"
-            return {"csv_file": os.path.join(output_dir, filename), "results": state["competitors_found"]}
+            final_results = []
+            for r in state["competitors_found"]:
+                d = r["domain"]
+                atc_info = state["atc_data"].get(d, {})
+                is_serp_ad = r.get("result_type") == "Ad"
+                is_atc_advertiser = atc_info.get("active_ads") not in ["0", "N/A", "Not Found", ""]
+                if is_serp_ad or is_atc_advertiser:
+                    final_results.append(r)
+                    
+            return {"csv_file": os.path.join(output_dir, filename), "results": final_results}
+
+
 
     except asyncio.CancelledError:
         logging.warning(" [!] Task was CANCELLED. Cleaning up...")
@@ -1416,6 +1473,8 @@ async def expand_local_results(page: Page, task_ref=None):
         return False
 
 async def main():
+    global CHECKPOINT_STATE, CHECKPOINT_FILE
+    state = get_initial_state()
     parser = argparse.ArgumentParser(description="Autonomous Google Ads Competitor Scraper")
     parser.add_argument("--keywords", type=str, help="Search query string")
     parser.add_argument("--location", type=str, default="India", help="Target location")
@@ -1465,6 +1524,8 @@ async def main():
         checkpoint_path = args.resume
         with open(args.resume, "r", encoding="utf-8") as f:
             state = json.load(f)
+        CHECKPOINT_STATE = state
+        CHECKPOINT_FILE = checkpoint_path
         logging.info(f"Resuming run from {checkpoint_path}")
         state["run_meta"]["status"] = "running"
     else:
@@ -1483,6 +1544,8 @@ async def main():
             "pages_completed": 0
         }
         flush_checkpoint(state, checkpoint_path)
+        CHECKPOINT_FILE = checkpoint_path
+        CHECKPOINT_STATE = state
         logging.info(f"Starting new run. Checkpoint: {checkpoint_path}")
 
     proxy_pool = []
@@ -1533,8 +1596,23 @@ async def main():
                 # If no pages exist in persistent context, create one
                 page = context.pages[0] if context.pages else await context.new_page()
                 
-                await scrape_serp(page, val_keys, val_pages, val_loc, args.debug, args.headless, args.skip_captcha, has_proxies, state=state, checkpoint_path=checkpoint_path)
+                # ── Phase 0: DISCOVERY (New CLI Feature) ──
+                logging.info(f" [Phase 0] Analyzing sector: '{val_keys}'...")
+                discovery_keywords = await discover_elite_keywords(page, val_keys, val_loc)
+                
+                # ── Phase 1-3: FULL MISSION ──
+                await scrape_serp(page, val_keys, val_pages, val_loc, args.debug, args.headless, args.skip_captcha, has_proxies, discovery_results=discovery_keywords, state=state, checkpoint_path=checkpoint_path)
+                
+                # Harvesting & ATC Verifier
+                logging.info(" [Phase 2] Harvesting contact details...")
+                await harvest_all_contacts(context, 5, state=state, checkpoint_path=checkpoint_path)
+                
+                logging.info(" [Phase 3] Verifying Ad Transparency registry...")
+                # Reuse browser for ATC (enrich_all_atc can take context)
+                await enrich_all_atc(context.browser, concurrency=2, state=state, checkpoint_path=checkpoint_path)
+                
                 await context.close()
+
                 break # SERP Scrape successful, exit rotation loop
                 
             except ProxyRotateException as e:

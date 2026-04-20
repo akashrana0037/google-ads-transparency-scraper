@@ -150,7 +150,7 @@ export default function App() {
 
         // Start CSV countdown the moment csv_available flips true
         if (s.csv_available && !csvExpiryRef.current) {
-          const expiresAt = Date.now() + 15 * 60 * 1000; // 15 min from now
+          const expiresAt = Date.now() + 120 * 60 * 1000; // 120 min from now (matches backend TTL)
           csvExpiryRef.current = expiresAt;
           csvCountdownRef.current = setInterval(() => {
             const left = Math.max(0, Math.floor((csvExpiryRef.current - Date.now()) / 1000));
@@ -885,9 +885,14 @@ export default function App() {
                           <Activity className="w-6 h-6 text-[var(--accent-main)]" />
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-[var(--text-secondary)]">Awaiting Intelligence Stream</p>
-                          <p className="section-label mt-1">Launch a mission to begin data collection</p>
+                          <p className="text-sm font-bold text-[var(--text-secondary)]">
+                            {taskStatus?.status === 'completed' ? 'No Active Advertisers Target' : 'Awaiting Intelligence Stream'}
+                          </p>
+                          <p className="section-label mt-1">
+                            {taskStatus?.status === 'completed' ? 'Zero ads detected for these targets. Try increasing Scan Depth.' : 'Launch a mission to begin data collection'}
+                          </p>
                         </div>
+
                       </div>
                     </td>
                   </tr>
