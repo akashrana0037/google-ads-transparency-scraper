@@ -10,8 +10,9 @@ import shutil
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 import logging
+import socket
 
-# ── Windows asyncio fix ──────────────────────────────────────────────────────
+# -- Windows asyncio fix ------------------------------------------------------
 # Playwright requires ProactorEventLoop on Windows to launch subprocesses.
 # The default SelectorEventLoop raises NotImplementedError on subprocess calls.
 if sys.platform == "win32":
@@ -76,6 +77,16 @@ async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(background_cleanup_loop())
     yield
     cleanup_task.cancel()  # Graceful shutdown
+
+def get_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
 
 app = FastAPI(title="Vector-Eye Engine API", lifespan=lifespan)
 
@@ -351,4 +362,10 @@ async def download_results(task_id: str):
 
 if __name__ == "__main__":
     import uvicorn
+    local_ip = get_local_ip()
+    print("\n" + "="*50)
+    print(f"[*] VECTOR-EYE ENGINE ONLINE")
+    print(f"   Local Access:   http://localhost:8000")
+    print(f"   Network Access: http://{local_ip}:8000")
+    print("="*50 + "\n")
     uvicorn.run(app, host="0.0.0.0", port=8000, loop="asyncio")

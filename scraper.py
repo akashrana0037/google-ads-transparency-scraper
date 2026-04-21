@@ -26,7 +26,7 @@ class ProxyRotateException(Exception):
 
 CONFIG = {
     "selectors": {
-        # ── Google Ads (2025/2026 multi-selector array — try each in order) ──
+        # -- Google Ads (2025/2026 multi-selector array - try each in order) --
         # Google rotates class names; we use multiple fallbacks.
         "ad_block_css": [
             "[data-text-ad]",           # Most stable data attribute
@@ -168,7 +168,7 @@ def handle_interrupt(sig, frame):
     # Attempt to write partial CSV only if we have an output directory
     output_dir = run_meta.get("output_dir")
     if output_dir:
-        export_csv(output_dir, partial=True)
+        export_csv(CHECKPOINT_STATE, output_dir, partial=True)
     
     if CHECKPOINT_FILE:
         logging.info(f"State saved to {CHECKPOINT_FILE}.")
@@ -181,7 +181,7 @@ def handle_interrupt(sig, frame):
 # 3. SEMANTIC VARIANT ENGINE (New v6.0)
 # ============================================================================
 
-# ── INTENT TEMPLATES: Rich keyword expansion without needing Google ──────────
+# -- INTENT TEMPLATES: Rich keyword expansion without needing Google --
 INTENT_TEMPLATES = {
     "commercial": [
         "best {sector} in {location}",
@@ -228,7 +228,7 @@ async def _fetch_google_autocomplete(sector: str, location: str) -> set:
     import urllib.request
     suggestions = set()
     
-    # ── Phase A: Standard Queries ──
+    # -- Phase A: Standard Queries --
     queries = [
         f"{sector} {location}",
         f"best {sector} {location}",
@@ -236,7 +236,7 @@ async def _fetch_google_autocomplete(sector: str, location: str) -> set:
         f"{sector} services {location}",
     ]
     
-    # ── Phase B: Alphabet Soup (A-M for speed/coverage balance) ──
+    # -- Phase B: Alphabet Soup (A-M for speed/coverage balance) --
     # We use a subset of letters to keep it fast while still being "elite"
     for char in "abcde": 
         queries.append(f"{sector} {char}")
@@ -260,18 +260,18 @@ async def discover_elite_keywords(page: Page, sector: str, location: str, task_r
     Elite 5-Source Keyword Intelligence Engine.
     
     Sources (in priority order):
-      1. Google Autocomplete API  — fast, no bot risk, high relevance
-      2. Intent Template Generator — 20+ structured variants
-      3. SERP PAA (People Also Ask) — question-intent keywords
-      4. SERP Related Searches     — lateral semantic expansion
-      5. Organic title mining       — location-specific ranking terms
+      1. Google Autocomplete API - fast, no bot risk, high relevance
+      2. Intent Template Generator - 20+ structured variants
+      3. SERP PAA (People Also Ask) - question-intent keywords
+      4. SERP Related Searches     - lateral semantic expansion
+      5. Organic title mining       - location-specific ranking terms
     """
-    if task_ref: task_ref.log(f"[Phase 0] Elite 5-Source Discovery → '{sector}' in '{location}'...")
+    if task_ref: task_ref.log(f"[Phase 0] Elite 5-Source Discovery -> '{sector}' in '{location}'...")
     logging.info(f" [Intel] Starting 5-source keyword discovery for '{sector}' + '{location}'...")
 
     discovered = set()
 
-    # ── SOURCE 1: Google Autocomplete (API — silent, no bot detection) ────────
+    # -- SOURCE 1: Google Autocomplete (API - silent, no bot detection) --
     if task_ref: task_ref.log("  [1/5] Querying Google Autocomplete API...")
     try:
         autocomplete_results = await _fetch_google_autocomplete(sector, location)
@@ -280,7 +280,7 @@ async def discover_elite_keywords(page: Page, sector: str, location: str, task_r
     except Exception as e:
         logging.warning(f" [!] Autocomplete API failed: {e}")
 
-    # ── SOURCE 2: Intent Template Generator (always runs) ────────────────────
+    # -- SOURCE 2: Intent Template Generator (always runs) --
     if task_ref: task_ref.log("  [2/5] Generating intent-based keyword templates...")
     for category, templates in INTENT_TEMPLATES.items():
         for tpl in templates:
@@ -288,7 +288,7 @@ async def discover_elite_keywords(page: Page, sector: str, location: str, task_r
             discovered.add(kw)
     logging.info(f" [Intel] Template engine added variants. Pool size: {len(discovered)}")
 
-    # ── SOURCE 3+4+5: SERP scraping (PAA + Related + Organic titles) ─────────
+    # -- SOURCE 3+4+5: SERP scraping (PAA + Related + Organic titles) --
     if task_ref: task_ref.log("  [3/5] Scraping SERP for PAA, Related, and Organic cues...")
     try:
         discovery_url = f"https://www.google.com/search?q={quote(sector + ' ' + location)}&gl=in&hl=en&num=10"
@@ -312,7 +312,7 @@ async def discover_elite_keywords(page: Page, sector: str, location: str, task_r
             html = await page.content()
             soup = BeautifulSoup(html, 'lxml')
 
-            # Source 3: PAA — People Also Ask (multiple selector variants for 2025-2026)
+            # Source 3: PAA - People Also Ask (multiple selector variants for 2025-2026)
             paa_selectors = [
                 ".dnXCYb", ".wQ6ne", "span[jsname]", ".CSY7u",
                 "[data-q]", ".related-question-pair span"
@@ -321,7 +321,7 @@ async def discover_elite_keywords(page: Page, sector: str, location: str, task_r
                 for el in soup.select(sel):
                     txt = el.get_text(strip=True)
                     if txt and 8 < len(txt) < 120 and "?" in txt:
-                        # Convert question to keyword: "What is X?" → "X"
+                        # Convert question to keyword: "What is X?" -> "X"
                         clean = re.sub(r'^(what|where|how|which|who|why|when|is|are|do|can)\s+', '', txt.lower(), flags=re.I)
                         clean = re.sub(r'\?.*$', '', clean).strip()
                         if len(clean) > 5:
@@ -338,23 +338,23 @@ async def discover_elite_keywords(page: Page, sector: str, location: str, task_r
                     if txt and 4 < len(txt) < 100:
                         discovered.add(txt)
 
-            # Source 5: Organic title mining — grab titles with location signals
+            # Source 5: Organic title mining - grab titles with location signals
             loc_low = location.lower()
             for title_el in soup.select("h3, .LC20lb, .DKV0Md"):
                 txt = title_el.get_text(strip=True).lower()
                 if loc_low in txt and 5 < len(txt) < 100:
-                    clean_t = re.split(r'[|\-–]', txt)[0].strip()
+                    clean_t = re.split(r'[|\-]', txt)[0].strip()
                     if len(clean_t) > 5:
                         discovered.add(clean_t)
 
-            if task_ref: task_ref.log(f"  [✓] SERP mining done. Raw pool: {len(discovered)} terms.")
+            if task_ref: task_ref.log(f"  [OK] SERP mining done. Raw pool: {len(discovered)} terms.")
         else:
             if task_ref: task_ref.log("  [!] Google blocked SERP access. Using Autocomplete + Templates only.")
 
     except Exception as e:
         logging.warning(f" [!] SERP discovery hurdle (non-fatal, fallback active): {e}")
 
-    # ── FINAL PROCESSING: Transactional Intent Scoring ──
+    # -- FINAL PROCESSING: Transactional Intent Scoring --
     # Goal: Pick the top 20 "Perfect" transactional keywords
     scored_pool = []
     modifiers = ["buy", "best", "price", "cost", "professional", "services", "agency", "quote", "near me", "rating"]
@@ -392,7 +392,7 @@ async def discover_elite_keywords(page: Page, sector: str, location: str, task_r
     if seed_kw not in results:
         results = [seed_kw] + results[:-1]
 
-    if task_ref: task_ref.log(f" [✓] Final Intelligence Pool: 20 Elite High-Intent Keywords.")
+    if task_ref: task_ref.log(f" [OK] Final Intelligence Pool: 20 Elite High-Intent Keywords.")
     logging.info(f" [Intel] Selected top 20 transactional keywords: {results}")
     return results
 
@@ -512,7 +512,7 @@ async def wait_for_captcha_resolution(page: Page, timeout_mins: int = 5) -> str:
             has_results = "#search" in html or 'name="q"' in html or "id=\"search\"" in html
             
             if not still_blocked and has_results:
-                logging.info(" [✓] CAPTCHA cleared! Resuming scrape...")
+                logging.info(" [OK] CAPTCHA cleared! Resuming scrape...")
                 return "success"
                 
         except PlaywrightError as e:
@@ -583,7 +583,7 @@ async def _resolve_aclk_domain(page: Page, aclk_url: str) -> str:
 
 async def _extract_ads_from_live_dom(page: Page, variant: str, domain_map: dict, competitors: list, task_ref=None) -> int:
     """
-    Primary ad extraction using Playwright's live DOM — catches JS-rendered ads
+    Primary ad extraction using Playwright's live DOM - catches JS-rendered ads
     that BeautifulSoup misses. Uses multiple selector strategies.
     """
     ads_found = 0
@@ -606,7 +606,7 @@ async def _extract_ads_from_live_dom(page: Page, variant: str, domain_map: dict,
 
                     ad_soup = BeautifulSoup(ad_html, 'lxml')
 
-                    # Extract all links — find the first non-google real domain
+                    # Extract all links - find the first non-google real domain
                     domain = ""
                     landing_url = ""
                     for a in ad_soup.find_all('a', href=True):
@@ -687,7 +687,7 @@ async def _extract_ads_from_live_dom(page: Page, variant: str, domain_map: dict,
                     competitors.append(comp)
                     domain_map[domain] = comp
                     ads_found += 1
-                    logging.info(f"   [Ad ✓] {domain} | '{headline[:50]}'")
+                    logging.info(f"   [Ad OK] {domain} | '{headline[:50]}'")
 
                 except Exception as e:
                     logging.debug(f"   [Ad parse error] {e}")
@@ -701,7 +701,7 @@ async def _extract_ads_from_live_dom(page: Page, variant: str, domain_map: dict,
 
 async def scrape_serp(page: Page, seed_keyword: str, max_pages: int, location: str, debug: bool, headless: bool, skip_captcha: bool, has_proxies: bool, task_ref=None, discovery_results: List[str] = None, state: dict = None, checkpoint_path: str = None):
     """
-    Elite SERP Scraper v7.0 — Playwright-native ad extraction + organic/local harvesting.
+    Elite SERP Scraper v7.0 - Playwright-native ad extraction + organic/local harvesting.
     """
     variants = discovery_results if discovery_results else generate_keyword_variants(seed_keyword)
     competitors = state["competitors_found"]
@@ -728,8 +728,7 @@ async def scrape_serp(page: Page, seed_keyword: str, max_pages: int, location: s
 
             url = f"https://www.google.com/search?q={quote(variant)}&start={start_index}&gl=in&hl=en&num=10"
 
-            # ── Human Path Simulation (V3 Innovation) ────────────────────
-            # To avoid the "12-minute pattern block", we simulate a human typing the 
+            # -- Human Path Simulation (V3 Innovation) --man typing the 
             # first page of each keyword instead of direct URL blasting.
             try:
                 if i == 0:
@@ -760,11 +759,11 @@ async def scrape_serp(page: Page, seed_keyword: str, max_pages: int, location: s
 
             await asyncio.sleep(random.uniform(2, 4))
 
-            # ── Block / Consent Detection ──────────────────────────────────
+            # -- Block / Consent Detection --rl:
             page_title = await page.title()
 
             if "Before you continue" in page_title or "consent.google.com" in page.url:
-                logging.info("  [!] Consent page — attempting bypass...")
+                logging.info("  [!] Consent page - attempting bypass...")
                 for btn_text in ["Accept all", "I agree", "Agree to all"]:
                     try:
                         btn = page.get_by_role("button", name=re.compile(btn_text, re.I)).first
@@ -780,7 +779,7 @@ async def scrape_serp(page: Page, seed_keyword: str, max_pages: int, location: s
                 if skip_captcha:
                     # In API mode, we DON'T crash. We log the block and RETURN to allow Analysis phases to run.
                     logging.warning(f" [!] PERSISTENT BLOCK for '{variant}'. Moving to Analysis Phase with existing data...")
-                    if task_ref: task_ref.log(f"⚠️ Google block detected for '{variant}'. Transitioning to Intel Harvesting.")
+                    if task_ref: task_ref.log(f"[!] Google block detected for '{variant}'. Transitioning to Intel Harvesting.")
                     return # Exit scrape_serp gracefully
                 else:
                     res = await wait_for_captcha_resolution(page)
@@ -788,7 +787,7 @@ async def scrape_serp(page: Page, seed_keyword: str, max_pages: int, location: s
                         logging.warning(f"  CAPTCHA/Block for '{variant}'. Skipping variant.")
                         break
 
-            # ── Scroll to trigger lazy-loaded bottom ads ───────────────────
+            # -- Scroll to trigger lazy-loaded bottom ads --ment.body.scrollHeight / 2)")
             try:
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
                 await asyncio.sleep(0.8)
@@ -801,14 +800,14 @@ async def scrape_serp(page: Page, seed_keyword: str, max_pages: int, location: s
 
             results_this_page = 0
 
-            # ── PHASE 1: AD EXTRACTION (Playwright live DOM) ───────────────
+            # -- PHASE 1: AD EXTRACTION (Playwright live DOM) --nt = await _extract_ads_from_live_dom(page, variant, domain_map, competitors, task_ref)
             ads_count = await _extract_ads_from_live_dom(page, variant, domain_map, competitors, task_ref)
             results_this_page += ads_count
             if task_ref and ads_count > 0:
-                task_ref.log(f"   ↳ Ads captured: {ads_count}")
+                task_ref.log(f"   -> Ads captured: {ads_count}")
             logging.info(f"  [Ads] Extracted {ads_count} ad leads.")
 
-            # ── PHASE 2: LOCAL PACK ───────────────────────────────────────
+            # -- PHASE 2: LOCAL PACK --count
             await expand_local_results(page, task_ref)
             html = await page.content()
             soup = BeautifulSoup(html, 'lxml')
@@ -1290,7 +1289,7 @@ async def run_autonomous_scrape(keywords: str, location: str, pages: int, checkp
 
     try:
         async with async_playwright() as p:
-            # ── Phase 0: Discovery & Approval ────────────────────────────
+            # -- Phase 0: Discovery & Approval --ser_agents"])
             selected_ua = random.choice(CONFIG["user_agents"])
             selected_vp = random.choice(CONFIG["viewports"])
 
@@ -1324,7 +1323,7 @@ async def run_autonomous_scrape(keywords: str, location: str, pages: int, checkp
                 task_ref.status = "scraping_serp"
                 task_ref.log(f"Phase 1/3: Scraping SERP for {len(discovery_keywords)} variants...")
 
-            # ── Phase 1: Robust SERP Scrape (with Self-Healing Loop) ──────
+            # -- Phase 1: Robust SERP Scrape (with Self-Healing Loop) --──────
             while state["run_meta"]["pages_completed"] < pages:
                 try:
                     # If browser/context is missing (first run or after crash), create it
@@ -1360,7 +1359,7 @@ async def run_autonomous_scrape(keywords: str, location: str, pages: int, checkp
 
                 except Exception as e:
                     logging.warning(f" [Self-Heal] Mission turbulence detected: {e}. Re-orienting identity...")
-                    if task_ref: task_ref.log(f"⚠️ Interface reset. Attempting to bypass block...")
+                    if task_ref: task_ref.log(f"[!] Interface reset. Attempting to bypass block...")
                     
                     # Cleanup previous context
                     if resources["context_main"]: await resources["context_main"].close()
@@ -1514,7 +1513,7 @@ async def main():
                 while not context.browser.is_connected() or len(context.pages) > 0:
                     await asyncio.sleep(5)
             except: pass
-            logging.info(" [✓] Login session saved. You can now run the scraper normally.")
+            logging.info(" [OK] Login session saved. You can now run the scraper normally.")
             return
 
     checkpoint_path = ""
@@ -1596,11 +1595,11 @@ async def main():
                 # If no pages exist in persistent context, create one
                 page = context.pages[0] if context.pages else await context.new_page()
                 
-                # ── Phase 0: DISCOVERY (New CLI Feature) ──
+                # -- Phase 0: DISCOVERY (New CLI Feature) --
                 logging.info(f" [Phase 0] Analyzing sector: '{val_keys}'...")
                 discovery_keywords = await discover_elite_keywords(page, val_keys, val_loc)
                 
-                # ── Phase 1-3: FULL MISSION ──
+                # -- Phase 1-3: FULL MISSION --──
                 await scrape_serp(page, val_keys, val_pages, val_loc, args.debug, args.headless, args.skip_captcha, has_proxies, discovery_results=discovery_keywords, state=state, checkpoint_path=checkpoint_path)
                 
                 # Harvesting & ATC Verifier

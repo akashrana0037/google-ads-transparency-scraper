@@ -1,4 +1,4 @@
-# 🛰️ Vyom (Vector-Eye) v2.0
+# Vyom (Vector-Eye) v2.0
 ### Autonomous Google Ads Sector Intelligence & Competitor Engine
 
 Vyom (Vector-Eye) is a precision-engineered intelligence tool designed to map out entire commercial sectors by identifying active advertisers and harvesting their high-value metadata. Unlike generic scrapers, Vyom operates on **Sectors**, not just keywords, and strictly filters for **active ad-spend targets**.
@@ -63,6 +63,15 @@ npm run dev
 ```
 
 Visit `http://localhost:3000` to launch your first mission.
+
+---
+
+## 🌐 Network Access & Sharing
+To access the dashboard from another device on the same network:
+1.  **Find your IP**: The backend terminal will display your `Network Access` IP (e.g., `http://192.168.1.10:8000`).
+2.  **Access the Dashboard**: Use the same IP but with port `3000` (e.g., `http://192.168.1.10:3000`).
+3.  **Firewall Check**: If it doesn't load, ensure your Windows Firewall allows inbound connections on ports `3000` and `8000`. 
+    *   *Tip*: Set your Network Profile to **Private** instead of **Public**.
 
 ---
 
