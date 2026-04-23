@@ -7,6 +7,7 @@ import json
 import os
 import uuid
 import shutil
+import glob
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 import logging
@@ -72,6 +73,24 @@ async def background_cleanup_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    
+    # Zombie Task Recovery
+    for task_id in os.listdir(OUTPUT_DIR):
+        checkpoint_file = os.path.join(OUTPUT_DIR, task_id, "mission_state.json")
+        if os.path.exists(checkpoint_file):
+            try:
+                with open(checkpoint_file, 'r') as f:
+                    state = json.load(f)
+                run_meta = state.get("run_meta", {})
+                if run_meta.get("status") in ["running", "scraping_serp", "harvesting_contacts", "verifying_ads"]:
+                    run_meta["status"] = "crashed"
+                    scraper.export_excel(state, os.path.join(OUTPUT_DIR, task_id), partial=True)
+                    with open(checkpoint_file, 'w') as f:
+                        json.dump(state, f, indent=2)
+                    logging.info(f" [Recovery] Recovered dead task {task_id}.")
+            except Exception as e:
+                logging.error(f" [Recovery] Failed to recover {task_id}: {e}")
+                
     purge_old_output_dirs()  # Immediate cleanup on startup
     # Start the background periodic cleanup
     cleanup_task = asyncio.create_task(background_cleanup_loop())
@@ -228,7 +247,7 @@ def cleanup_task_resources(task):
     pass
 
 @app.post("/api/scrape")
-async def start_scrape(keywords: str, location: str = "India", pages: int = 1, headless: bool = True, background_tasks: BackgroundTasks = BackgroundTasks()):
+async def start_scrape(keywords: str, location: str = "India", pages: int = 1, headless: bool = True):
     task_id = str(uuid.uuid4())[:8]
     task = ScrapeTask(task_id, keywords, location, pages)
     task.headless = headless
@@ -248,6 +267,8 @@ async def get_status(task_id: str):
     task = rehydrate_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    
+    output_dir = os.path.join(OUTPUT_DIR, task_id)
     
     # Try to extract the most recent variant from the mission checkpoint
     active_variant = task.active_variant
@@ -305,6 +326,17 @@ async def abort_scrape(task_id: str):
             logging.info(f" [!] Task {task_id} manually cancelled by user.")
     
     return {"status": "aborting"}
+
+@app.get("/api/download_excel/{task_id}")
+async def download_excel(task_id: str):
+    output_dir = os.path.join(OUTPUT_ROOT, task_id)
+    files = glob.glob(os.path.join(output_dir, "*.xlsx"))
+    if not files:
+        raise HTTPException(status_code=404, detail="Excel file not found")
+    
+    # Return the latest xlsx file
+    latest_file = max(files, key=os.path.getmtime)
+    return FileResponse(latest_file, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', filename=os.path.basename(latest_file))
 
 @app.get("/api/results/{task_id}")
 async def get_results(task_id: str):

@@ -150,7 +150,7 @@ export default function App() {
 
         // Start CSV countdown the moment csv_available flips true
         if (s.csv_available && !csvExpiryRef.current) {
-          const expiresAt = Date.now() + 120 * 60 * 1000; // 120 min from now (matches backend TTL)
+          const expiresAt = Date.now() + 120 * 60 * 1000;
           csvExpiryRef.current = expiresAt;
           csvCountdownRef.current = setInterval(() => {
             const left = Math.max(0, Math.floor((csvExpiryRef.current - Date.now()) / 1000));
@@ -158,6 +158,10 @@ export default function App() {
             if (left === 0) clearInterval(csvCountdownRef.current);
           }, 1000);
           setCsvSecondsLeft(15 * 60);
+        }
+        
+        if (s.status === 'crashed' && !error) {
+           setError("CRITICAL INCIDENT DETECTED: The server process terminated unexpectedly. Emergency recovery has extracted all gathered data into an Excel report.");
         }
       } catch (err) {
         if (err.response?.status === 404) {
@@ -251,12 +255,13 @@ export default function App() {
     queued:'Queued', running:'Scanning...', scraping_serp:'SERP Extraction',
     harvesting_contacts:'Harvesting Intel', verifying_ads:'Ad Verification',
     awaiting_approval:'Keyword Approval', completed:'Mission Complete',
-    failed:'System Failure', aborted:'Aborted', interrupted:'Offline/Halted'
+    failed:'System Failure', aborted:'Aborted', interrupted:'Offline/Halted',
+    crashed: 'CRASH RECOVERY'
   })[s] || s || 'Standby';
 
   const getStatusColor = (s) => {
     if (s === 'completed') return 'var(--success)';
-    if (['failed','aborted'].includes(s)) return 'var(--danger)';
+    if (['failed','aborted','crashed'].includes(s)) return 'var(--danger)';
     if (['running','scraping_serp','harvesting_contacts','verifying_ads','discovering_keywords'].includes(s)) return 'var(--accent-main)';
     if (s === 'awaiting_approval') return 'var(--warning)';
     return 'var(--text-muted)';
@@ -265,7 +270,7 @@ export default function App() {
   const calcProgress = () => {
     const s = taskStatus?.status;
     if (!s || s === 'queued') return 0;
-    const phases = { running:5, discovering_keywords:15, awaiting_approval:40, scraping_serp:60, harvesting_contacts:80, verifying_ads:95, completed:100, failed:100, aborted:100, interrupted:100 };
+    const phases = { running:5, discovering_keywords:15, awaiting_approval:40, scraping_serp:60, harvesting_contacts:80, verifying_ads:95, completed:100, failed:100, aborted:100, interrupted:100, crashed:100 };
     const base = phases[s] || 0;
     const extra = s === 'scraping_serp' ? Math.min((taskStatus?.results_count || 0) * 2, 18) : 0;
     return Math.min(base + extra, 99.9).toFixed(1);
@@ -420,6 +425,15 @@ export default function App() {
 
               {taskStatus?.csv_available && (
                 <CsvDownloadButton href={`${API_BASE}/download/${taskId}`} secondsLeft={csvSecondsLeft} />
+              )}
+              {taskStatus?.excel_available && (
+                <button onClick={() => window.open(`${API_BASE}/download_excel/${taskId}`)}
+                  className="flex items-center justify-between gap-3 w-full py-2.5 px-4 rounded-full border border-[var(--accent-main)]/30 bg-[var(--accent-mute)] text-[var(--accent-main)] text-[10px] font-extrabold uppercase tracking-widest hover:bg-[var(--accent-main)] hover:text-white transition-all group">
+                   <div className="flex items-center gap-2">
+                     <Database className="w-3.5 h-3.5" /> Download Intel (Excel)
+                   </div>
+                   <ArrowUp className="w-3 h-3 opacity-40 group-hover:opacity-100 rotate-45" />
+                </button>
               )}
             </div>
 

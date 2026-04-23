@@ -15,6 +15,8 @@ from urllib.parse import urlparse, unquote, quote
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright, Page, BrowserContext, Error as PlaywrightError
 from tqdm import tqdm
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 class ProxyRotateException(Exception):
     """Raised to trigger a destruction and recreation of the Playwright browser using a new proxy."""
@@ -925,17 +927,12 @@ async def harvest_single_domain(context: BrowserContext, comp: dict, sem: asynci
     }
     
     page = None
-    try:
-        async with sem:
-            try:
-                page = await context.new_page()
-                await page.add_init_script(STEALTH_SCRIPTS)
-            except Exception as e:
-                logging.error(f" [Harvest] Page creation failed for {domain}: {e}")
-                contact_data["scrape_status"] = "Browser Crash"
-                return
-
+    async with sem:
+        try:
             # 1. Homepage Visit
+            page = await context.new_page()
+            await page.add_init_script(STEALTH_SCRIPTS)
+            
             homepage_url = f"https://{domain}"
             resp = await page.goto(homepage_url, timeout=CONFIG['timeouts']['harvest_site'], wait_until="domcontentloaded")
             
@@ -992,24 +989,27 @@ async def harvest_single_domain(context: BrowserContext, comp: dict, sem: asynci
                             if new_socials[k]: contact_data["social"][k] = new_socials[k]
                     except:
                         continue
-                    
-    except PlaywrightError as e:
-        if "Timeout" in str(e):
-            contact_data["scrape_status"] = "Timeout"
-        else:
-            contact_data["scrape_status"] = "Error"
-    except Exception as e:
-        contact_data["scrape_status"] = "Error"
-    finally:
-        if page:
+            
             await page.close()
-        
-        # Convert sets to lists for JSON serialization
-        contact_data["emails"] = sorted(list(contact_data["emails"]))
-        contact_data["phones"] = sorted(list(contact_data["phones"]))
-        
-        state["contacts_harvested"][domain] = contact_data
-        flush_checkpoint(state, checkpoint_path)
+            page = None
+
+        except PlaywrightError as e:
+            logging.debug(f" [Harvest] Browser error for {domain}: {e}")
+            contact_data["scrape_status"] = "Timeout" if "Timeout" in str(e) else "Error"
+        except Exception as e:
+            logging.debug(f" [Harvest] Unexpected error for {domain}: {e}")
+            contact_data["scrape_status"] = "Error"
+        finally:
+            if page:
+                try: await page.close()
+                except: pass
+    
+    # Convert sets to lists for JSON serialization
+    contact_data["emails"] = sorted(list(contact_data["emails"]))
+    contact_data["phones"] = sorted(list(contact_data["phones"]))
+    
+    state["contacts_harvested"][domain] = contact_data
+    flush_checkpoint(state, checkpoint_path)
 
 async def harvest_all_contacts(context: BrowserContext, concurrency: int, state: dict, checkpoint_path: str, task_ref=None):
     """Driver for parallel site visiting."""
@@ -1023,14 +1023,24 @@ async def harvest_all_contacts(context: BrowserContext, concurrency: int, state:
     logging.info(f"Harvesting contact info for {len(pending)} domains (Concurrency= {concurrency})...")
     sem = asyncio.Semaphore(concurrency)
     
-    tasks = [harvest_single_domain(context, comp, sem, state, checkpoint_path) for comp in pending]
-    
-    # Run loop with progress bar
-    for f in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="Harvesting Sites"):
-        if task_ref and task_ref.aborted:
-            logging.info(" [!] Abort detected during harvesting. Terminating workers...")
-            break
-        await f
+    # Process in batches of 20 to recycle context and prevent memory leaks
+    batch_size = 20
+    for i in range(0, len(pending), batch_size):
+        batch = pending[i : i + batch_size]
+        logging.info(f" [Harvest] Starting batch {i//batch_size + 1} ({len(batch)} domains)...")
+        
+        # We use a fresh context for each batch to flush memory
+        async with await context.browser.new_context(user_agent=random.choice(CONFIG["user_agents"])) as fresh_context:
+            await fresh_context.add_init_script(STEALTH_SCRIPTS)
+            
+            tasks = [harvest_single_domain(fresh_context, comp, sem, state, checkpoint_path) for comp in batch]
+            
+            # Run batch with progress bar
+            for f in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc=f"Harvesting Batch {i//batch_size + 1}", leave=False):
+                if task_ref and task_ref.aborted:
+                    logging.info(" [!] Abort detected during harvesting. Terminating workers...")
+                    return
+                await f
 
 # ============================================================================
 # 6. ADS TRANSPARENCY ENRICHMENT (ANONYMOUS)
@@ -1250,6 +1260,114 @@ def export_csv(state: dict, output_dir: str, partial: bool = False):
             
     logging.info(f"Successfully wrote {len(comps)} records to {filepath}")
 
+
+def export_excel(state: dict, output_dir: str, partial: bool = False):
+    """Writes results to a formatted Excel (.xlsx) file."""
+    run_meta = state.get("run_meta", {})
+    comps = state.get("competitors_found", [])
+    contacts = state.get("contacts_harvested", {})
+    
+    if not comps:
+        logging.warning("No competitors found to export to Excel.")
+        return None
+    
+    timestamp = run_meta.get("started_at", "unknown").replace(":", "").replace("-", "").replace("T", "_")[:15]
+    suffix = "_EMERGENCY_RECOVERY" if partial else ""
+    filename = f"report_{timestamp}{suffix}.xlsx"
+    filepath = os.path.join(output_dir, filename)
+    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Intelligence Report"
+    
+    headers = [
+        "Search Date", "Keywords", "Location", "Result Type",
+        "Company Name", "Domain", "Landing Page", "Displayed Link",
+        "Ad Headline", "Ad Description", "Emails", "Phones", "Address",
+        "Facebook", "Instagram", "LinkedIn", "Twitter", "YouTube",
+        "ATC Verified Name", "ATC ID", "Active Ads",
+        "Scrape Status", "Scraped At"
+    ]
+    
+    # Styling
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+    center_align = Alignment(horizontal="center", vertical="center")
+    border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center_align
+        cell.border = border
+
+    row_count = 0
+    for c in comps:
+        domain = c["domain"]
+        atc = state["atc_data"].get(domain, {
+            "verified_name": "N/A", "advertiser_id": "N/A", "active_ads": "0"
+        })
+        
+        # Filtering logic same as CSV
+        is_serp_ad = c.get("result_type") == "Ad"
+        is_atc_advertiser = atc.get("active_ads") not in ["0", "N/A", "Not Found", ""]
+        
+        if not (is_serp_ad or is_atc_advertiser):
+            continue
+
+        harvest = contacts.get(domain, {
+             "emails": [], "phones": [], "address": "",
+             "social": {'facebook': '', 'instagram': '', 'linkedin': '', 'twitter': '', 'youtube': ''},
+             "scrape_status": ""
+        })
+        
+        row = [
+            datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            run_meta.get("keywords", "N/A"),
+            run_meta.get("location", "N/A"),
+            c["result_type"],
+            c["company_name"],
+            domain,
+            c.get("landing_page_url", ""),
+            c.get("displayed_link", ""),
+            c.get("ad_headline", ""),
+            c.get("ad_description", ""),
+            "; ".join(harvest["emails"]),
+            "; ".join(harvest["phones"]),
+            harvest["address"],
+            harvest["social"]["facebook"],
+            harvest["social"]["instagram"],
+            harvest["social"]["linkedin"],
+            harvest["social"]["twitter"],
+            harvest["social"]["youtube"],
+            atc["verified_name"],
+            atc["advertiser_id"],
+            atc["active_ads"],
+            harvest["scrape_status"],
+            datetime.now(timezone.utc).isoformat()
+        ]
+        ws.append(row)
+        row_count += 1
+
+    # Auto-adjust column widths
+    for column in ws.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except: pass
+        adjusted_width = (max_length + 2)
+        ws.column_dimensions[column_letter].width = min(adjusted_width, 50) # Cap at 50
+
+    wb.save(filepath)
+    logging.info(f"Excel Report generated: {filepath} ({row_count} records)")
+    return filepath
+
 # ============================================================================
 # 8. AUTONOMOUS RUNNER (API COMPATIBLE)
 # ============================================================================
@@ -1401,6 +1519,7 @@ async def run_autonomous_scrape(keywords: str, location: str, pages: int, checkp
             state["run_meta"]["status"] = "completed"
             flush_checkpoint(state, checkpoint_file)
             export_csv(state, output_dir, partial=False)
+            excel_file = export_excel(state, output_dir, partial=False)
             
             filename = "results_" + state["run_meta"]["started_at"].replace(":", "").replace("-", "").replace("T", "_")[:15] + ".csv"
             final_results = []
@@ -1412,7 +1531,7 @@ async def run_autonomous_scrape(keywords: str, location: str, pages: int, checkp
                 if is_serp_ad or is_atc_advertiser:
                     final_results.append(r)
                     
-            return {"csv_file": os.path.join(output_dir, filename), "results": final_results}
+            return {"csv_file": os.path.join(output_dir, filename), "excel_file": excel_file, "results": final_results}
 
 
 
