@@ -28,7 +28,8 @@ Bypass Google's modern anti-bot measures:
 A premium React Dashboard featuring:
 *   **Intelligence Grid**: Real-time streaming lead data.
 *   **Ghost Feed**: Live telemetry logs from the scraping engine.
-*   **One-Click Export**: 120-minute atomic CSV reports with enriched advertiser metadata.
+*   **One-Click Export**: 120-minute atomic CSV and Excel (.xlsx) reports with enriched advertiser metadata.
+*   **Incident Recovery**: Automatic batched browser contexts prevent OOM crashes, plus emergency data export to salvage partial data if an error occurs.
 
 ---
 

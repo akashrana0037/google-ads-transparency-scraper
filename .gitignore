@@ -44,6 +44,7 @@ yarn-error.log*
 output/*
 !output/.gitkeep
 *.csv
+*.xlsx
 *.json
 mission_state.json
 test_*/

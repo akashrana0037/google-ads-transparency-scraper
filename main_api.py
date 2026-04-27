@@ -79,13 +79,13 @@ async def lifespan(app: FastAPI):
         checkpoint_file = os.path.join(OUTPUT_DIR, task_id, "mission_state.json")
         if os.path.exists(checkpoint_file):
             try:
-                with open(checkpoint_file, 'r') as f:
+                with open(checkpoint_file, 'r', encoding='utf-8') as f:
                     state = json.load(f)
                 run_meta = state.get("run_meta", {})
                 if run_meta.get("status") in ["running", "scraping_serp", "harvesting_contacts", "verifying_ads"]:
                     run_meta["status"] = "crashed"
                     scraper.export_excel(state, os.path.join(OUTPUT_DIR, task_id), partial=True)
-                    with open(checkpoint_file, 'w') as f:
+                    with open(checkpoint_file, 'w', encoding='utf-8') as f:
                         json.dump(state, f, indent=2)
                     logging.info(f" [Recovery] Recovered dead task {task_id}.")
             except Exception as e:
@@ -153,7 +153,7 @@ def rehydrate_task(task_id: str):
     
     if os.path.exists(checkpoint_file):
         try:
-            with open(checkpoint_file, 'r') as f:
+            with open(checkpoint_file, 'r', encoding='utf-8') as f:
                 state = json.load(f)
                 run_meta = state.get("run_meta", {})
                 
@@ -274,7 +274,7 @@ async def get_status(task_id: str):
     active_variant = task.active_variant
     if task.checkpoint_file and os.path.exists(task.checkpoint_file):
         try:
-            with open(task.checkpoint_file, 'r') as f:
+            with open(task.checkpoint_file, 'r', encoding='utf-8') as f:
                 state = json.load(f)
                 active_variant = state.get("run_meta", {}).get("active_variant", task.active_variant)
                 # Sync results count from checkpoint for higher fidelity
@@ -329,7 +329,7 @@ async def abort_scrape(task_id: str):
 
 @app.get("/api/download_excel/{task_id}")
 async def download_excel(task_id: str):
-    output_dir = os.path.join(OUTPUT_ROOT, task_id)
+    output_dir = os.path.join(OUTPUT_DIR, task_id)
     files = glob.glob(os.path.join(output_dir, "*.xlsx"))
     if not files:
         raise HTTPException(status_code=404, detail="Excel file not found")
@@ -346,7 +346,7 @@ async def get_results(task_id: str):
     
     if task.checkpoint_file and os.path.exists(task.checkpoint_file):
         try:
-            with open(task.checkpoint_file, 'r') as f:
+            with open(task.checkpoint_file, 'r', encoding='utf-8') as f:
                 state = json.load(f)
                 competitors = state.get("competitors_found", [])
                 contacts = state.get("contacts_harvested", {})
