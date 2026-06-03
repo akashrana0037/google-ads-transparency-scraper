@@ -415,69 +415,6 @@ def clean_domain(url: str) -> str:
     except:
         return ""
 
-def strip_tracking_params(url: str) -> str:
-    if not url:
-        return ""
-    try:
-        parsed = urlparse(url)
-        q = parse_qs_custom(parsed.query)
-        # remove known tracking
-        for block in ['gclid', 'gad_source', 'utm_source', 'utm_medium', 'utm_campaign']:
-            q.pop(block, None)
-        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
-    except:
-        return url
-
-def parse_qs_custom(query: str) -> dict:
-    result = {}
-    for pair in query.split('&'):
-        if '=' in pair:
-            k, v = pair.split('=', 1)
-            result[k] = v
-    return result
-
-def extract_emails(text: str) -> set:
-    emails = set()
-    # Handle standard emails
-    matches = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
-    emails.update([m.lower() for m in matches])
-    # Handle obfuscated e.g. info [at] domain dot com
-    obf_matches = re.findall(r'([a-zA-Z0-9._%+-]+)\s*(?:\[at\]|\(at\)|\s+at\s+)\s*([a-zA-Z0-9.-]+)\s*(?:\[dot\]|\(dot\)|\s+dot\s+)\s*([a-zA-Z]{2,})', text, re.I)
-    for m in obf_matches:
-        emails.add(f"{m[0]}@{m[1]}.{m[2]}".lower())
-    # Exclude image artifacts like .png, .jpg
-    return {e for e in emails if not e.endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'))}
-
-def extract_phones(text: str) -> set:
-    phones = set()
-    # Indian context regex: +91, std codes, mobiles
-    matches = re.findall(r'(?:\+?91[\-\s]?)?(?:\(?0\d{2,3}\)?[\-\s]?)?\d{3,4}[\-\s]?\d{3,4}[\-\s]?\d{3,4}', text)
-    for p in matches:
-        clean_p = re.sub(r'[^\d\+]', '', p)
-        if 8 <= len(clean_p) <= 15:
-            phones.add(clean_p)
-    return phones
-
-def extract_address(text: str) -> str:
-    # Look for 6 digit pins Indian context
-    text_clean = re.sub(r'\s+', ' ', text)
-    match = re.search(r'(.{0,100}\d{6}.{0,50})', text_clean)
-    if match:
-        return match.group(1).strip()
-    return ""
-
-def extract_socials(html: str) -> dict:
-    soup = BeautifulSoup(html, 'html.parser')
-    socials = {'facebook': '', 'instagram': '', 'linkedin': '', 'twitter': '', 'youtube': ''}
-    for a in soup.find_all('a', href=True):
-        href = a['href']
-        low_href = href.lower()
-        if 'facebook.com' in low_href: socials['facebook'] = href
-        elif 'instagram.com' in low_href: socials['instagram'] = href
-        elif 'linkedin.com' in low_href: socials['linkedin'] = href
-        elif 'twitter.com' in low_href or 'x.com' in low_href: socials['twitter'] = href
-        elif 'youtube.com' in low_href: socials['youtube'] = href
-    return socials
 
 async def wait_for_captcha_resolution(page: Page, timeout_mins: int = 5) -> str:
     """
@@ -633,23 +570,6 @@ async def _extract_ads_from_live_dom(page: Page, variant: str, domain_map: dict,
                         continue
                     seen_in_this_call.add(domain)
 
-                    if domain in domain_map:
-                        # Upgrade Organic/Local to Ad if encountered in an ad slot
-                        existing = domain_map[domain]
-                        if existing.get("result_type") != "Ad":
-                            logging.info(f"   [Ad Upgrade] {domain} from {existing.get('result_type')} -> Ad")
-                            existing["result_type"] = "Ad"
-                            # Add missing ad details
-                            existing["ad_headline"] = existing.get("ad_headline") or headline
-                            existing["ad_description"] = existing.get("ad_description") or description
-                            existing["displayed_link"] = existing.get("displayed_link") or displayed_link
-                            existing["landing_page_url"] = landing_url or existing.get("landing_page_url")
-                        
-                        if variant not in existing.get('matched_keywords', []):
-                            existing.setdefault('matched_keywords', []).append(variant)
-                        continue
-
-
                     # Extract headline
                     headline = ""
                     for sel in CONFIG['selectors']['ad_headline'].split(', '):
@@ -673,6 +593,22 @@ async def _extract_ads_from_live_dom(page: Page, variant: str, domain_map: dict,
                         if node:
                             displayed_link = node.get_text(strip=True)
                             break
+
+                    if domain in domain_map:
+                        # Upgrade Organic/Local to Ad if encountered in an ad slot
+                        existing = domain_map[domain]
+                        if existing.get("result_type") != "Ad":
+                            logging.info(f"   [Ad Upgrade] {domain} from {existing.get('result_type')} -> Ad")
+                            existing["result_type"] = "Ad"
+                            # Add missing ad details
+                            existing["ad_headline"] = existing.get("ad_headline") or headline
+                            existing["ad_description"] = existing.get("ad_description") or description
+                            existing["displayed_link"] = existing.get("displayed_link") or displayed_link
+                            existing["landing_page_url"] = landing_url or existing.get("landing_page_url")
+                        
+                        if variant not in existing.get('matched_keywords', []):
+                            existing.setdefault('matched_keywords', []).append(variant)
+                        continue
 
                     company_name = displayed_link or headline or domain
 
@@ -809,41 +745,9 @@ async def scrape_serp(page: Page, seed_keyword: str, max_pages: int, location: s
                 task_ref.log(f"   -> Ads captured: {ads_count}")
             logging.info(f"  [Ads] Extracted {ads_count} ad leads.")
 
-            # -- PHASE 2: LOCAL PACK --count
-            await expand_local_results(page, task_ref)
+            # -- PHASE 2: LOCAL PACK -- (Bypassed to collect Organic and Ads only)
             html = await page.content()
             soup = BeautifulSoup(html, 'lxml')
-
-            local_count = 0
-            for local in soup.select(CONFIG['selectors']['local_item']):
-                link = local.select_one(CONFIG['selectors']['result_link'])
-                if not link:
-                    continue
-                domain = clean_domain(link.get('href', ''))
-                if not domain or 'google' in domain:
-                    continue
-
-                if domain in domain_map:
-                    if variant not in domain_map[domain].get('matched_keywords', []):
-                        domain_map[domain].setdefault('matched_keywords', []).append(variant)
-                    continue
-
-                title_node = local.select_one('.OSrXXb, .qBF1Pd, .dbg0pd')
-                comp = {
-                    "result_type": "Local",
-                    "company_name": title_node.get_text(strip=True) if title_node else domain,
-                    "domain": domain,
-                    "landing_page_url": link.get('href', ''),
-                    "displayed_link": domain,
-                    "matched_keywords": [variant],
-                    "ad_headline": "",
-                    "ad_description": "",
-                }
-                competitors.append(comp)
-                domain_map[domain] = comp
-                local_count += 1
-            results_this_page += local_count
-            logging.info(f"  [Local] Extracted {local_count} local leads.")
 
             # ── PHASE 3: ORGANIC ─────────────────────────────────────────
             organic_count = 0
@@ -911,136 +815,13 @@ async def scrape_serp(page: Page, seed_keyword: str, max_pages: int, location: s
 # 5. CONTACT HARVESTING
 # ============================================================================
 
-async def harvest_single_domain(context: BrowserContext, comp: dict, sem: asyncio.Semaphore, state: dict, checkpoint_path: str):
-    """Visits homepage and /contact, extracts raw text and merges insights."""
-    domain = comp["domain"]
-    if domain in state["contacts_harvested"]:
-        return # Skip already harvested
-    
-    contact_data = {
-        "emails": set(),
-        "phones": set(),
-        "address": "",
-        "social": {'facebook': '', 'instagram': '', 'linkedin': '', 'twitter': '', 'youtube': ''},
-        "contact_page_url": "",
-        "scrape_status": "Error"
-    }
-    
-    page = None
-    async with sem:
-        try:
-            # 1. Homepage Visit
-            page = await context.new_page()
-            await page.add_init_script(STEALTH_SCRIPTS)
-            
-            homepage_url = f"https://{domain}"
-            resp = await page.goto(homepage_url, timeout=CONFIG['timeouts']['harvest_site'], wait_until="domcontentloaded")
-            
-            if resp and resp.status in [403, 401]:
-                contact_data["scrape_status"] = "Blocked"
-            else:
-                contact_data["scrape_status"] = "Success"
-                
-                # Extract details
-                html = await page.content()
-                text = await page.evaluate("() => document.body ? document.body.innerText : ''")
-                
-                contact_data["emails"].update(extract_emails(text))
-                contact_data["emails"].update(extract_emails(html)) # Mailto links
-                contact_data["phones"].update(extract_phones(text))
-                contact_data["address"] = extract_address(text)
-                
-                new_socials = extract_socials(html)
-                for k in new_socials:
-                    if new_socials[k]: contact_data["social"][k] = new_socials[k]
-
-                # 2. Contact/About/Services Page Deep-Crawl
-                crawl_targets = await page.evaluate('''() => {
-                    const links = Array.from(document.querySelectorAll('a'));
-                    return links
-                        .filter(l => {
-                            const t = l.innerText.toLowerCase();
-                            const h = l.href ? l.href.toLowerCase() : "";
-                            return t.includes('contact') || h.includes('contact') ||
-                                   t.includes('about') || h.includes('about') ||
-                                   t.includes('service') || h.includes('service');
-                        })
-                        .map(l => l.href)
-                        .filter((v, i, a) => a.indexOf(v) === i) // Unique
-                        .slice(0, 3); // Max 3 deep pages to avoid bloat
-                }''')
-                
-                for target_url in crawl_targets:
-                    if not target_url.startswith('http'): continue
-                    try:
-                        await page.goto(target_url, timeout=10000, wait_until="domcontentloaded")
-                        curr_html = await page.content()
-                        curr_text = await page.evaluate("() => document.body ? document.body.innerText : ''")
-                        
-                        contact_data["emails"].update(extract_emails(curr_text))
-                        contact_data["emails"].update(extract_emails(curr_html))
-                        contact_data["phones"].update(extract_phones(curr_text))
-                        if not contact_data["address"]:
-                            contact_data["address"] = extract_address(curr_text)
-                            
-                        # Refresh social leads
-                        new_socials = extract_socials(curr_html)
-                        for k in new_socials:
-                            if new_socials[k]: contact_data["social"][k] = new_socials[k]
-                    except:
-                        continue
-            
-            await page.close()
-            page = None
-
-        except PlaywrightError as e:
-            logging.debug(f" [Harvest] Browser error for {domain}: {e}")
-            contact_data["scrape_status"] = "Timeout" if "Timeout" in str(e) else "Error"
-        except Exception as e:
-            logging.debug(f" [Harvest] Unexpected error for {domain}: {e}")
-            contact_data["scrape_status"] = "Error"
-        finally:
-            if page:
-                try: await page.close()
-                except: pass
-    
-    # Convert sets to lists for JSON serialization
-    contact_data["emails"] = sorted(list(contact_data["emails"]))
-    contact_data["phones"] = sorted(list(contact_data["phones"]))
-    
-    state["contacts_harvested"][domain] = contact_data
-    flush_checkpoint(state, checkpoint_path)
 
 async def harvest_all_contacts(context: BrowserContext, concurrency: int, state: dict, checkpoint_path: str, task_ref=None):
-    """Driver for parallel site visiting."""
-    competitors = state["competitors_found"]
-    pending = [c for c in competitors if c["domain"] not in state["contacts_harvested"]]
-    
-    if not pending:
-        logging.info("All contacts harvested from checkpoint. Skipping.")
-        return
-
-    logging.info(f"Harvesting contact info for {len(pending)} domains (Concurrency= {concurrency})...")
-    sem = asyncio.Semaphore(concurrency)
-    
-    # Process in batches of 20 to recycle context and prevent memory leaks
-    batch_size = 20
-    for i in range(0, len(pending), batch_size):
-        batch = pending[i : i + batch_size]
-        logging.info(f" [Harvest] Starting batch {i//batch_size + 1} ({len(batch)} domains)...")
-        
-        # We use a fresh context for each batch to flush memory
-        async with await context.browser.new_context(user_agent=random.choice(CONFIG["user_agents"])) as fresh_context:
-            await fresh_context.add_init_script(STEALTH_SCRIPTS)
-            
-            tasks = [harvest_single_domain(fresh_context, comp, sem, state, checkpoint_path) for comp in batch]
-            
-            # Run batch with progress bar
-            for f in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc=f"Harvesting Batch {i//batch_size + 1}", leave=False):
-                if task_ref and task_ref.aborted:
-                    logging.info(" [!] Abort detected during harvesting. Terminating workers...")
-                    return
-                await f
+    """Driver for parallel site visiting (Bypassed completely as company details are not requested)."""
+    logging.info(" [Harvest] Website content scraping is disabled. Skipping Phase 3 (Contact Harvesting).")
+    if task_ref:
+        task_ref.log("Website content scraping is disabled. Skipping Phase 3 (Contact Harvesting).")
+    return
 
 # ============================================================================
 # 6. ADS TRANSPARENCY ENRICHMENT (ANONYMOUS)
@@ -1174,6 +955,22 @@ async def enrich_all_atc(browser, concurrency: int = 2, state: dict = None, chec
 # 7. CSV OUTPUT
 # ============================================================================
 
+def is_active_advertiser(result_type: str, active_ads: str) -> bool:
+    """Robust verification to check if a listing is an active advertiser."""
+    if result_type == "Ad":
+        return True
+    if not active_ads or active_ads in ["N/A", "Not Found", ""]:
+        return False
+    digits = "".join([c for c in active_ads if c.isdigit()])
+    if digits:
+        try:
+            return int(digits) > 0
+        except:
+            pass
+    if "0" in active_ads:
+        return False
+    return False
+
 def export_csv(state: dict, output_dir: str, partial: bool = False):
     """Writes results to CSV."""
     run_meta = state.get("run_meta", {})
@@ -1212,11 +1009,7 @@ def export_csv(state: dict, output_dir: str, partial: bool = False):
             })
             
             # FILTER: Only export companies identified as active advertisers
-            # (Either caught in SERP as an Ad OR verified via ATC as having >0 ads)
-            is_serp_ad = c.get("result_type") == "Ad"
-            is_atc_advertiser = atc.get("active_ads") not in ["0", "N/A", "Not Found", ""]
-            
-            if not (is_serp_ad or is_atc_advertiser):
+            if not is_active_advertiser(c.get("result_type"), atc.get("active_ads")):
                 continue
 
 
@@ -1312,10 +1105,7 @@ def export_excel(state: dict, output_dir: str, partial: bool = False):
         })
         
         # Filtering logic same as CSV
-        is_serp_ad = c.get("result_type") == "Ad"
-        is_atc_advertiser = atc.get("active_ads") not in ["0", "N/A", "Not Found", ""]
-        
-        if not (is_serp_ad or is_atc_advertiser):
+        if not is_active_advertiser(c.get("result_type"), atc.get("active_ads")):
             continue
 
         harvest = contacts.get(domain, {
@@ -1495,24 +1285,25 @@ async def run_autonomous_scrape(keywords: str, location: str, pages: int, checkp
             resources["context_main"] = None
             resources["browser_main"] = None
 
-            # Phase 2: Harvesting
+            # Phase 2: ATC
             if task_ref:
-                task_ref.status = "harvesting_contacts"
-                task_ref.log("Phase 2/3: Harvesting contact details...")
+                task_ref.status = "verifying_ads"
+                task_ref.log("Phase 2/3: Verifying Ad Transparency Registry...")
             
             resources["browser_harvest"] = await p.chromium.launch(headless=True)
+            await enrich_all_atc(resources["browser_harvest"], concurrency=2, state=state, checkpoint_path=checkpoint_file, task_ref=task_ref)
+            
+            # Phase 3: Harvesting (only for active advertisers)
+            if task_ref:
+                task_ref.status = "harvesting_contacts"
+                task_ref.log("Phase 3/3: Harvesting contact details for active advertisers...")
+            
             resources["context_contacts"] = await resources["browser_harvest"].new_context(user_agent=random.choice(CONFIG["user_agents"]))
             await resources["context_contacts"].add_init_script(STEALTH_SCRIPTS)
             
             await harvest_all_contacts(resources["context_contacts"], 5, state=state, checkpoint_path=checkpoint_file, task_ref=task_ref) 
             await resources["context_contacts"].close()
             
-            # Phase 3: ATC
-            if task_ref:
-                task_ref.status = "verifying_ads"
-                task_ref.log("Phase 3/3: Verifying Ad Transparency Registry...")
-            
-            await enrich_all_atc(resources["browser_harvest"], concurrency=2, state=state, checkpoint_path=checkpoint_file, task_ref=task_ref)
             await resources["browser_harvest"].close()
             
             # Finalize
@@ -1526,9 +1317,7 @@ async def run_autonomous_scrape(keywords: str, location: str, pages: int, checkp
             for r in state["competitors_found"]:
                 d = r["domain"]
                 atc_info = state["atc_data"].get(d, {})
-                is_serp_ad = r.get("result_type") == "Ad"
-                is_atc_advertiser = atc_info.get("active_ads") not in ["0", "N/A", "Not Found", ""]
-                if is_serp_ad or is_atc_advertiser:
+                if is_active_advertiser(r.get("result_type"), atc_info.get("active_ads")):
                     final_results.append(r)
                     
             return {"csv_file": os.path.join(output_dir, filename), "excel_file": excel_file, "results": final_results}
@@ -1561,34 +1350,7 @@ async def run_autonomous_scrape(keywords: str, location: str, pages: int, checkp
 # 9. MAIN ORCHESTRATION (CLI)
 # ============================================================================
 
-async def expand_local_results(page: Page, task_ref=None):
-    """Detects and expands the 'More places' section if available, scrolling the sidebar."""
-    try:
-        more_places = await page.query_selector(CONFIG['selectors']['local_more_places'])
-        if more_places:
-            if task_ref: task_ref.log("Local Pack Detected. Initiating Deep-Dive Expansion...")
-            logging.info("Deep-Dive Expansion: More places button found. Clicking...")
-            await more_places.click()
-            await page.wait_for_load_state("domcontentloaded")
-            await asyncio.sleep(random.uniform(3, 5))
-            
-            # Identify the scrollable sidebar
-            sidebar = await page.query_selector(CONFIG['selectors']['local_sidebar'])
-            if sidebar:
-                logging.info("Local Sidebar expansion started. Scrolling to reveal hidden competitors...")
-                # Scroll a few times to get more results (e.g., 3-4 scroll cycles)
-                for s in range(3):
-                    if task_ref and task_ref.aborted: break
-                    await sidebar.evaluate("el => el.scrollTop = el.scrollHeight")
-                    await asyncio.sleep(random.uniform(2, 3))
-                    if task_ref: task_ref.log(f"Deep-Dive: Scrolled Local Panel ({s+1}/3)")
-                
-                # Check for 'Next' button if any, or just take what we have
-                return True
-        return False
-    except Exception as e:
-        logging.warning(f"Local expansion failed (possibly already on page): {e}")
-        return False
+
 
 async def main():
     global CHECKPOINT_STATE, CHECKPOINT_FILE
@@ -1721,13 +1483,14 @@ async def main():
                 # -- Phase 1-3: FULL MISSION --──
                 await scrape_serp(page, val_keys, val_pages, val_loc, args.debug, args.headless, args.skip_captcha, has_proxies, discovery_results=discovery_keywords, state=state, checkpoint_path=checkpoint_path)
                 
-                # Harvesting & ATC Verifier
-                logging.info(" [Phase 2] Harvesting contact details...")
-                await harvest_all_contacts(context, 5, state=state, checkpoint_path=checkpoint_path)
-                
-                logging.info(" [Phase 3] Verifying Ad Transparency registry...")
+                # Verify Ad Transparency registry first to find active advertisers
+                logging.info(" [Phase 2] Verifying Ad Transparency registry...")
                 # Reuse browser for ATC (enrich_all_atc can take context)
                 await enrich_all_atc(context.browser, concurrency=2, state=state, checkpoint_path=checkpoint_path)
+                
+                # Harvest contact details only for verified active advertisers
+                logging.info(" [Phase 3] Harvesting contact details...")
+                await harvest_all_contacts(context, 5, state=state, checkpoint_path=checkpoint_path)
                 
                 await context.close()
 
@@ -1755,20 +1518,19 @@ async def main():
                     raise e # Actually crash if we have no rotation fallback
                 continue # Try next proxy if available
 
-        # Phase 2: Contact Harvesting
+        # Phase 2: Ads Transparency
         cb_args = {}
         if proxy_pool:
             cb_args["proxy"] = {"server": proxy_pool[0]}
             
         browser = await p.chromium.launch(headless=args.headless, **cb_args)
-        # Enrichment: Contact Info
+        await enrich_all_atc(browser, concurrency=2, state=state, checkpoint_path=checkpoint_path)
+        
+        # Phase 3: Contact Harvesting (only for active advertisers)
         context_contacts = await browser.new_context(user_agent=random.choice(CONFIG["user_agents"]))
         await context_contacts.add_init_script(STEALTH_SCRIPTS)
         await harvest_all_contacts(context_contacts, args.concurrency, state=state, checkpoint_path=checkpoint_path)
         await context_contacts.close()
-        
-        # Enrichment: Ads Transparency
-        await enrich_all_atc(browser, concurrency=2, state=state, checkpoint_path=checkpoint_path)
         
         await browser.close()
 

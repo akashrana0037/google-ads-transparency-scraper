@@ -25,7 +25,7 @@ const ECGMonitor = ({ className, status }) => {
 };
 
 /* ─── Logo ───────────────────────────────────────────────────────────────── */
-const VectorEyeLogo = ({ className }) => (
+const VyomLogo = ({ className }) => (
   <svg className={className} viewBox="0 0 36 36" fill="none">
     <circle cx="18" cy="18" r="16" stroke="var(--accent-main)" strokeWidth="1.2" strokeDasharray="3 2" opacity="0.4"/>
     <circle cx="18" cy="18" r="9" fill="var(--accent-mute)" stroke="var(--accent-main)" strokeWidth="1.4"/>
@@ -104,7 +104,7 @@ const CsvDownloadButton = ({ href, secondsLeft }) => {
 };
 
 export default function App() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('ve_theme') || 'dark');
+  const [theme, setTheme] = useState(() => localStorage.getItem('vyom_theme') || 'dark');
   const [keywords, setKeywords] = useState('');
   const [location, setLocation] = useState('India');
   const [pages, setPages] = useState(1);
@@ -127,11 +127,11 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('ve_theme', theme);
+    localStorage.setItem('vyom_theme', theme);
   }, [theme]);
 
   useEffect(() => {
-    const savedTask = localStorage.getItem('ve_task_id');
+    const savedTask = localStorage.getItem('vyom_task_id');
     if (savedTask) setTaskId(savedTask);
   }, []);
 
@@ -166,7 +166,7 @@ export default function App() {
       } catch (err) {
         if (err.response?.status === 404) {
           setTaskId(null);
-          localStorage.removeItem('ve_task_id');
+          localStorage.removeItem('vyom_task_id');
         }
       }
     };
@@ -205,7 +205,7 @@ export default function App() {
       const res = await axios.post(`${API_BASE}/scrape`, null, { params: { keywords, location, pages, headless } });
       const newTaskId = res.data.task_id;
       setTaskId(newTaskId);
-      localStorage.setItem('ve_task_id', newTaskId);
+      localStorage.setItem('vyom_task_id', newTaskId);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to start. Is the engine online?');
     } finally {
@@ -246,7 +246,7 @@ export default function App() {
     setCsvSecondsLeft(null);
     csvExpiryRef.current = null;
     if (csvCountdownRef.current) clearInterval(csvCountdownRef.current);
-    localStorage.removeItem('ve_task_id');
+    localStorage.removeItem('vyom_task_id');
   };
 
   const awaitingApproval = taskStatus?.status === 'awaiting_approval';
@@ -290,17 +290,17 @@ export default function App() {
         style={{background:'rgba(var(--bg-rgb),0.82)'}}>
         <div className="max-w-[1400px] mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <VectorEyeLogo className="w-7 h-7" />
+            <VyomLogo className="w-7 h-7" />
             <div className="flex items-baseline gap-2">
               <span className="text-base font-[900] tracking-tight text-[var(--text-primary)]">
-                Vector<span className="text-[var(--accent-main)]">Eye</span>
+                VYOM<span className="text-[var(--accent-main)]">.ai</span>
               </span>
               <span className="text-[9px] mono font-bold px-1.5 py-0.5 rounded bg-[var(--accent-mute)] text-[var(--accent-main)] border border-[var(--accent-main)]/20">
-                PRO v5.2
+                PRO v2.0
               </span>
             </div>
             <div className="hidden md:flex items-center gap-1 ml-4 pl-4 border-l border-[var(--card-border)]">
-              <span className="section-label">Sector Intelligence Commander</span>
+              <span className="section-label">Sector Intelligence Command Dashboard</span>
             </div>
           </div>
 

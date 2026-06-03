@@ -131,6 +131,7 @@ class ScrapeTask:
         self.aborted = False
         self.checkpoint_file = None
         self.csv_file = None
+        self.excel_file = None
         self.error = None
         self.active_variant = "Initializing..."
         self.discovered_keywords = []
@@ -174,11 +175,12 @@ def rehydrate_task(task_id: str):
                 task.checkpoint_file = checkpoint_file
                 task.active_variant = run_meta.get("active_variant", "Restored Session")
                 
-                # Locate CSV results if present
+                # Locate CSV/Excel results if present
                 for file in os.listdir(task_dir):
                     if file.endswith(".csv"):
                         task.csv_file = os.path.abspath(os.path.join(task_dir, file))
-                        break
+                    elif file.endswith(".xlsx"):
+                        task.excel_file = os.path.abspath(os.path.join(task_dir, file))
                 
                 # Sync counts
                 competitors = state.get("competitors_found", [])
@@ -227,6 +229,7 @@ async def run_scraper_task(task: ScrapeTask):
             if not task.aborted:
                 task.status = "completed"
                 task.csv_file = result["csv_file"]
+                task.excel_file = result.get("excel_file")
                 task.results_count = len(result.get("results", []))
                 task.log("Mission Completed Successfully.")
             
@@ -293,6 +296,7 @@ async def get_status(task_id: str):
         "start_time": task.start_time,
         "logs": task.logs,
         "csv_available": task.csv_file is not None and os.path.exists(task.csv_file),
+        "excel_available": task.excel_file is not None and os.path.exists(task.excel_file),
         "error": task.error,
         "discovered_keywords": task.discovered_keywords
     }
@@ -350,14 +354,18 @@ async def get_results(task_id: str):
                 state = json.load(f)
                 competitors = state.get("competitors_found", [])
                 contacts = state.get("contacts_harvested", {})
+                atc_data = state.get("atc_data", {})
                 
-                # Merge contacts into competitors
+                # Merge contacts into competitors and filter for active advertisers
                 merged = []
                 for c in competitors:
-                    merged.append({
-                        **c,
-                        "contacts": contacts.get(c['domain'], {})
-                    })
+                    domain = c["domain"]
+                    atc = atc_data.get(domain, {})
+                    if scraper.is_active_advertiser(c.get("result_type"), atc.get("active_ads")):
+                        merged.append({
+                            **c,
+                            "contacts": contacts.get(domain, {})
+                        })
                 return merged
         except:
             return []

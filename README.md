@@ -1,88 +1,84 @@
-# Vyom (Vector-Eye) v2.0
+# ⚡ VYOM v2.0
 ### Autonomous Google Ads Sector Intelligence & Competitor Engine
 
-Vyom (Vector-Eye) is a precision-engineered intelligence tool designed to map out entire commercial sectors by identifying active advertisers and harvesting their high-value metadata. Unlike generic scrapers, Vyom operates on **Sectors**, not just keywords, and strictly filters for **active ad-spend targets**.
+**Vyom** (Sanskrit for *Sky* / *Space*) is a precision-engineered intelligence engine designed to map out entire commercial sectors by identifying active advertisers and harvesting high-value metadata directly from Google Search SERPs and the **Google Ads Transparency Center (ATC)**. 
+
+Vyom is built for scale: it strictly filters for active ad-spend targets and optimizes performance by bypassing resource-heavy website crawling, preventing memory issues and uvicorn process crashes.
 
 ---
 
-## ⚡ Elite Performance Features
+## 🚀 Key Features
 
 ### 1. 🧠 Alphabet Soup Sector Discovery
-Provide a single high-level sector (e.g., *"Luxury Real Estate"*), and the engine autonomously discovers the **Top 20 high-intent transactional keywords** using:
-*   **Alphabet Expansion**: Iterating through `Sector + [a-z]` suggestions.
-*   **Transactional Scoring**: Algorithms that prioritize keywords with "buying signals" (*Price, Best, Agency, Quote*).
-*   **PAA mining**: Extracting "People Also Ask" questions and converting them into keyword targets.
+Provide a single sector (e.g., *"Luxury Real Estate"*), and Vyom autonomously discovers the **Top 20 transactional keywords** using:
+* **Alphabet Expansion**: Appending `[a-z]` query modifiers.
+* **Transactional Intent Scoring**: Prioritizing keywords with buying signals (*price, agency, best, quote*).
+* **PAA mining**: Converting question-intent SERP queries into transactional targets.
 
-### 2. 🛡️ Absolute Advertiser Filtering
-Maximize your ROI by focusing only on competitors spending money.
-*   **Verified Ads Only**: The system filters out organic noise.
-*   **Multi-Source Validation**: Domains are cross-referenced with the **Google Ads Transparency Center (ATC)** to confirm active advertiser status and Ad IDs.
+### 2. 🔍 Double-Source SERP Extraction (Bypassed Local Pack)
+To save system memory, the engine focuses purely on high-intent listings:
+* **Paid Ads**: Playwright-native extraction catches dynamically rendered ads.
+* **Organic Websites**: Extracts top organic listings.
+* **Local Listings Bypassed**: Google Maps/Local pack results are excluded from extraction, keeping the scraper fast and clean.
 
-### 3. 🕴️ Stealth-First Architecture
-Bypass Google's modern anti-bot measures:
-*   **Human Simulation**: Mimics human typing and navigation behavior.
-*   **Identity Shifting**: Rotates User-Agents, Viewports, and Hardware signatures.
-*   **Persistent Trust**: Support for persistent Google login sessions to establish "Trusted Session" status.
+### 3. 🛡️ Ads Transparency Center (ATC) Verification & Output Filtering
+* **Direct Verification**: All extracted domains are queried directly against Google's Ads Transparency Center to check verified company names, advertiser IDs, and active ad counts.
+* **Strict Output Filter**: Both final report files (CSV, Excel) and the dashboard's **Intelligence Grid** only show listings verified as active advertisers (ad count > 0), completely filtering out non-advertiser noise.
 
-### 4. 💎 Sky-Blue Command Center
-A premium React Dashboard featuring:
-*   **Intelligence Grid**: Real-time streaming lead data.
-*   **Ghost Feed**: Live telemetry logs from the scraping engine.
-*   **One-Click Export**: 120-minute atomic CSV and Excel (.xlsx) reports with enriched advertiser metadata.
-*   **Incident Recovery**: Automatic batched browser contexts prevent OOM crashes, plus emergency data export to salvage partial data if an error occurs.
+### 4. ⚡ Zero-Crawling Architecture (No Server Crashes)
+* **Bypassed Contact Harvest**: Does not crawl individual competitor homepages or contact pages for emails/phones. Bypassing this phase avoids heavy Playwright contexts, drastically reducing RAM usage and preventing server crashes.
+
+### 5. 🎨 Golden-Yellow & White Dashboard UI
+* A premium, high-contrast gold/charcoal theme (Light Mode: crisp warm white; Dark Mode: golden charcoal) built with React + Vite + Tailwind CSS.
 
 ---
 
-## 🛠️ Quick Installation
+## 🛠️ Installation & Setup
 
-### 1. Requirements
-*   Python 3.10+
-*   Node.js & npm (for Frontend)
-*   Playwright Browsers
+### 1. Prerequisites
+* **Python 3.10+**
+* **Node.js & npm**
+* **Google Chrome / Playwright Browsers**
 
-### 2. Setup
+### 2. Quick Setup
+1. Install Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   playwright install chromium
+   ```
+2. Install Frontend React dependencies:
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+---
+
+## ⚡ Execution
+
+### 1. Run Everything (Backend + Frontend)
+Double-click or run the startup batch script in the root directory:
 ```bash
-# Install Python Dependencies
-pip install -r requirements.txt
-playwright install chromium
-
-# Install Frontend Dependencies
-cd frontend
-npm install
+run_servers.bat
 ```
+This launches:
+* **FastAPI Backend API** on `http://localhost:8000` (FastAPI orchestrator)
+* **React Dashboard** on `http://localhost:3000` (Vite dev server)
+In separate, color-coded Command Prompt windows for easy log monitoring.
 
-### 3. Execution
-**Start the Backend Engine:**
+### 2. Run Command Line Scraper (CLI)
+You can also run the core engine directly from the command line:
 ```bash
-python main_api.py
+python scraper.py --keywords "Dentist" --location "Mumbai" --pages 1 --headless
 ```
-
-**Start the Dashboard:**
-```bash
-cd frontend
-npm run dev
-```
-
-Visit `http://localhost:3000` to launch your first mission.
+Report files are exported to the `./output` folder in both CSV (`results_*.csv`) and Excel (`report_*.xlsx`) formats.
 
 ---
 
-## 🌐 Network Access & Sharing
-To access the dashboard from another device on the same network:
-1.  **Find your IP**: The backend terminal will display your `Network Access` IP (e.g., `http://192.168.1.10:8000`).
-2.  **Access the Dashboard**: Use the same IP but with port `3000` (e.g., `http://192.168.1.10:3000`).
-3.  **Firewall Check**: If it doesn't load, ensure your Windows Firewall allows inbound connections on ports `3000` and `8000`. 
-    *   *Tip*: Set your Network Profile to **Private** instead of **Public**.
+## 📂 Project Architecture
 
----
-
-## 📂 Architecture
-*   `scraper.py`: The core autonomous intelligence engine.
-*   `main_api.py`: FastAPI backend orchestrator & task manager.
-*   `frontend/`: The high-fidelity React dashboard.
-*   `output/`: Automated CSV and debug captures.
-
----
-
-## ⚖️ License & Ethics
-This tool is for competitive intelligence and research purposes. Users are responsible for adhering to Google's Terms of Service and local privacy regulations.
+* `scraper.py`: Core sector discovery, SERP extraction, and ATC verification engine.
+* `main_api.py`: FastAPI backend wrapper communicating task status and results to the UI.
+* `run_servers.bat`: Automated multi-server launch script.
+* `frontend/`: React + Vite client dashboard.
+* `output/`: Folder containing exported CSV and Excel reports.

@@ -1,33 +1,18 @@
-# --- Mission Control Junk ---
+# --- Python Cache & Virtual Environments ---
 __pycache__/
-google_session/
-*.docx
 *.py[cod]
 *$py.class
-*.so
-.Python
-env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
 .venv/
 venv/
-pip-log.txt
-pip-delete-this-directory.txt
+env/
+.Python
+*.egg-info/
+*.egg
 
-# --- Node.js (Frontend) ---
+# --- Google Login Sessions ---
+google_session/
+
+# --- Node.js & React (Frontend) ---
 frontend/node_modules/
 frontend/dist/
 frontend/.env
@@ -39,19 +24,17 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# --- Scraper Output & Checkpoints ---
-# Completely block raw output data
+# --- Scraper Output & Report Files ---
 output/*
 !output/.gitkeep
 *.csv
 *.xlsx
 *.json
 mission_state.json
-test_*/
 debug_*/
 *.html
 
-# --- Editors & OS ---
+# --- IDEs & System Junk ---
 .vscode/
 .idea/
 .DS_Store
@@ -59,6 +42,6 @@ Thumbs.db
 *.swp
 *.swo
 
-# --- Assistant & Automation ---
+# --- Agents & Automation ---
 .agent/
 scripts/ralph/
