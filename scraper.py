@@ -851,77 +851,42 @@ async def verify_atc_data(context: BrowserContext, domain: str, sem: asyncio.Sem
                 atc_item["status"] = "Browser Crash"
                 return
 
-            # Step 1: Navigation
+            # Step 1: Navigation directly to the domain query page
             url = f"https://adstransparency.google.com/?region=IN&domain={quote(domain)}"
             await page.goto(url, wait_until="networkidle", timeout=30000)
-            await asyncio.sleep(3) # Let SPA settle
+            await asyncio.sleep(5) # Let SPA settle and load ads
             
-            # Step 1: Type Domain into search box
-            search_box = "input.input-area"
-            await page.wait_for_selector(search_box, timeout=10000)
-            await page.click(search_box)
-            await page.fill(search_box, domain)
-            await asyncio.sleep(5) # Wait for dropdown
-            
-            # Step 2: Detect first 'Advertiser' result in dropdown
-            dropdown_item = "material-select-item.item"
-            try:
-                await page.wait_for_selector(dropdown_item, timeout=8000)
-                # Click the first match
-                await page.click(dropdown_item)
+            # Step 2: Direct Extraction (No typing or clicking needed)
+            # 2a. Extract Ads Count
+            count_node = await page.query_selector("div.ads-count, .grid-info .left-repo")
+            if count_node:
+                atc_item["active_ads"] = (await count_node.inner_text()).strip()
                 
-                # IMPORTANT: Wait for the URL to change to the profile page
-                # e.g., adstransparency.google.com/advertiser/AR...
-                try:
-                    await page.wait_for_url(re.compile(r".*/advertiser/.*"), timeout=15000)
-                except:
-                    logging.debug(f" [ATC] Timeout waiting for URL change for '{domain}'. Continuing...")
+            # 2b. Extract Verified Name
+            name_node = await page.query_selector(".advertiser-name, div.legal-name, span.advertiser-name")
+            if name_node:
+                atc_item["verified_name"] = (await name_node.inner_text()).strip()
                 
-                await asyncio.sleep(5) # Final SPA settle
-                
-                # Step 3: Extract Data from Profile Page
-                current_url = page.url
-                # Extract ID from URL path: .../advertiser/AR16638892... or .../agency/AR166...
-                id_match = re.search(r'/(?:advertiser|agency)/([^?&/]+)', current_url)
-                if not id_match:
-                    # Retry once after a short wait if we are on a result page but URL hasn't settled
-                    await asyncio.sleep(2)
-                    id_match = re.search(r'/(?:advertiser|agency)/([^?&/]+)', page.url)
-                
+            # 2c. Extract Advertiser ID
+            link_node = await page.query_selector("a[href*='/advertiser/'], a[href*='/agency/']")
+            if link_node:
+                href = await link_node.get_attribute("href")
+                id_match = re.search(r'/(?:advertiser|agency)/([^?&/]+)', href)
                 if id_match:
                     atc_item["advertiser_id"] = id_match.group(1)
-                
-                # Extract Verified Name (New Selector)
-                name_node = await page.query_selector("span.advertiser-name.current-scope")
-                if not name_node:
-                    name_node = await page.query_selector("div.legal-name")
-                if not name_node:
-                    name_node = await page.query_selector(".grid-info .name")
                     
-                if name_node:
-                    atc_item["verified_name"] = (await name_node.inner_text()).strip()
-                
-                # Extract Ad Count (New Selector)
-                count_node = await page.query_selector("div.ads-count")
-                if not count_node:
-                    count_node = await page.query_selector(".grid-info .left-repo")
-                    
-                if count_node:
-                    atc_item["active_ads"] = (await count_node.inner_text()).strip()
-                
-                atc_item["status"] = "Found"
-                logging.info(f" [ATC] Verified '{domain}' -> {atc_item['verified_name']} | ID: {atc_item['advertiser_id']} ({atc_item['active_ads']})")
-                
-            except Exception as e:
-                atc_item["status"] = "Error"
-                logging.debug(f" [ATC] Parsing failure for '{domain}': {e}")
+            atc_item["status"] = "Found"
+            logging.info(f" [ATC] Verified '{domain}' -> {atc_item['verified_name']} | ID: {atc_item['advertiser_id']} ({atc_item['active_ads']})")
 
         except Exception as e:
             atc_item["status"] = "Error"
             logging.debug(f" [ATC] Failure checking '{domain}': {e}")
         finally:
             if page:
-                await page.close()
+                try:
+                    await page.close()
+                except:
+                    pass
             state["atc_data"][domain] = atc_item
             flush_checkpoint(state, checkpoint_path)
 
@@ -992,10 +957,8 @@ def export_csv(state: dict, output_dir: str, partial: bool = False):
     headers = [
         "search_date", "search_keywords", "search_location", "result_type",
         "company_name", "domain", "landing_page_url", "displayed_link",
-        "ad_headline", "ad_description", "emails", "phones", "address",
-        "facebook", "instagram", "linkedin", "twitter", "youtube",
-        "atc_verified_name", "atc_advertiser_id", "atc_active_ads",
-        "contact_page_url", "scrape_status", "scraped_at"
+        "ad_headline", "ad_description",
+        "atc_verified_name", "atc_advertiser_id", "atc_active_ads", "scraped_at"
     ]
     
     with open(filepath, 'w', newline='', encoding='utf-8') as f:
@@ -1012,13 +975,6 @@ def export_csv(state: dict, output_dir: str, partial: bool = False):
             if not is_active_advertiser(c.get("result_type"), atc.get("active_ads")):
                 continue
 
-
-            harvest = contacts.get(domain, {
-                 "emails": [], "phones": [], "address": "",
-                 "social": {'facebook': '', 'instagram': '', 'linkedin': '', 'twitter': '', 'youtube': ''},
-                 "contact_page_url": "", "scrape_status": ""
-            })
-            
             atc = state["atc_data"].get(domain, {
                 "verified_name": "N/A", "advertiser_id": "N/A", "active_ads": "N/A"
             })
@@ -1034,19 +990,9 @@ def export_csv(state: dict, output_dir: str, partial: bool = False):
                 "displayed_link": c.get("displayed_link", ""),
                 "ad_headline": c.get("ad_headline", ""),
                 "ad_description": c.get("ad_description", ""),
-                "emails": ";".join(harvest["emails"]),
-                "phones": ";".join(harvest["phones"]),
-                "address": harvest["address"],
-                "facebook": harvest["social"]["facebook"],
-                "instagram": harvest["social"]["instagram"],
-                "linkedin": harvest["social"]["linkedin"],
-                "twitter": harvest["social"]["twitter"],
-                "youtube": harvest["social"]["youtube"],
                 "atc_verified_name": atc["verified_name"],
                 "atc_advertiser_id": atc["advertiser_id"],
                 "atc_active_ads": atc["active_ads"],
-                "contact_page_url": harvest["contact_page_url"],
-                "scrape_status": harvest["scrape_status"],
                 "scraped_at": datetime.now(timezone.utc).isoformat()
             }
             writer.writerow(row)
@@ -1078,10 +1024,8 @@ def export_excel(state: dict, output_dir: str, partial: bool = False):
     headers = [
         "Search Date", "Keywords", "Location", "Result Type",
         "Company Name", "Domain", "Landing Page", "Displayed Link",
-        "Ad Headline", "Ad Description", "Emails", "Phones", "Address",
-        "Facebook", "Instagram", "LinkedIn", "Twitter", "YouTube",
-        "ATC Verified Name", "ATC ID", "Active Ads",
-        "Scrape Status", "Scraped At"
+        "Ad Headline", "Ad Description", "ATC Verified Name", "ATC ID", "Active Ads",
+        "Scraped At"
     ]
     
     # Styling
@@ -1108,12 +1052,6 @@ def export_excel(state: dict, output_dir: str, partial: bool = False):
         if not is_active_advertiser(c.get("result_type"), atc.get("active_ads")):
             continue
 
-        harvest = contacts.get(domain, {
-             "emails": [], "phones": [], "address": "",
-             "social": {'facebook': '', 'instagram': '', 'linkedin': '', 'twitter': '', 'youtube': ''},
-             "scrape_status": ""
-        })
-        
         row = [
             datetime.now(timezone.utc).strftime("%Y-%m-%d"),
             run_meta.get("keywords", "N/A"),
@@ -1125,18 +1063,9 @@ def export_excel(state: dict, output_dir: str, partial: bool = False):
             c.get("displayed_link", ""),
             c.get("ad_headline", ""),
             c.get("ad_description", ""),
-            "; ".join(harvest["emails"]),
-            "; ".join(harvest["phones"]),
-            harvest["address"],
-            harvest["social"]["facebook"],
-            harvest["social"]["instagram"],
-            harvest["social"]["linkedin"],
-            harvest["social"]["twitter"],
-            harvest["social"]["youtube"],
             atc["verified_name"],
             atc["advertiser_id"],
             atc["active_ads"],
-            harvest["scrape_status"],
             datetime.now(timezone.utc).isoformat()
         ]
         ws.append(row)

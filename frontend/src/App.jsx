@@ -148,16 +148,19 @@ export default function App() {
         setStatus(s.status);
         setResults(resultsRes.data || []);
 
-        // Start CSV countdown the moment csv_available flips true
-        if (s.csv_available && !csvExpiryRef.current) {
-          const expiresAt = Date.now() + 120 * 60 * 1000;
-          csvExpiryRef.current = expiresAt;
-          csvCountdownRef.current = setInterval(() => {
-            const left = Math.max(0, Math.floor((csvExpiryRef.current - Date.now()) / 1000));
-            setCsvSecondsLeft(left);
-            if (left === 0) clearInterval(csvCountdownRef.current);
-          }, 1000);
-          setCsvSecondsLeft(15 * 60);
+        // Start CSV countdown the moment csv_available flips true and sync with server
+        if (s.csv_available && s.csv_ttl_remaining !== undefined && s.csv_ttl_remaining !== null) {
+          if (!csvExpiryRef.current || Math.abs(csvExpiryRef.current - (Date.now() + s.csv_ttl_remaining * 1000)) > 5000) {
+            const expiresAt = Date.now() + s.csv_ttl_remaining * 1000;
+            csvExpiryRef.current = expiresAt;
+            if (csvCountdownRef.current) clearInterval(csvCountdownRef.current);
+            csvCountdownRef.current = setInterval(() => {
+              const left = Math.max(0, Math.floor((csvExpiryRef.current - Date.now()) / 1000));
+              setCsvSecondsLeft(left);
+              if (left === 0) clearInterval(csvCountdownRef.current);
+            }, 1000);
+            setCsvSecondsLeft(s.csv_ttl_remaining);
+          }
         }
         
         if (s.status === 'crashed' && !error) {

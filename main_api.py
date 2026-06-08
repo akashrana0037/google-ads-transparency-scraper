@@ -166,10 +166,11 @@ def rehydrate_task(task_id: str):
                     pages=run_meta.get("max_pages", 1)
                 )
                 
-                # Zombie Prevention: If it was left 'running' on disk but isn't in ACTIVE_TASKS,
+                # Zombie Prevention: If it was left in any running state on disk but isn't in ACTIVE_TASKS,
                 # it means the server crashed/stopped mid-mission. Mark as aborted.
                 saved_status = run_meta.get("status", "completed")
-                task.status = "aborted" if saved_status in ["running", "starting"] else saved_status
+                running_states = ["running", "starting", "scraping_serp", "harvesting_contacts", "verifying_ads", "discovering_keywords", "awaiting_approval"]
+                task.status = "aborted" if saved_status in running_states else saved_status
                 
                 task.start_time = run_meta.get("started_at")
                 task.checkpoint_file = checkpoint_file
@@ -287,6 +288,16 @@ async def get_status(task_id: str):
         except:
             pass
 
+    # Calculate TTL remaining
+    ttl_seconds_remaining = None
+    if task.csv_file and os.path.exists(task.csv_file):
+        try:
+            mtime = os.path.getmtime(task.csv_file)
+            age_seconds = datetime.now().timestamp() - mtime
+            ttl_seconds_remaining = max(0, int(OUTPUT_TTL_MINUTES * 60 - age_seconds))
+        except:
+            pass
+
     return {
         "status": task.status,
         "progress": task.progress,
@@ -298,7 +309,8 @@ async def get_status(task_id: str):
         "csv_available": task.csv_file is not None and os.path.exists(task.csv_file),
         "excel_available": task.excel_file is not None and os.path.exists(task.excel_file),
         "error": task.error,
-        "discovered_keywords": task.discovered_keywords
+        "discovered_keywords": task.discovered_keywords,
+        "csv_ttl_remaining": ttl_seconds_remaining
     }
 
 @app.post("/api/confirm/{task_id}")
